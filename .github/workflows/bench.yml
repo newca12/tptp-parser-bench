@@ -1,0 +1,101 @@
+name: TPTP Parser Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  deployments: write
+
+jobs:
+  benchmark:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # ── Build all parser wrappers ──────────────────────────────────────
+      - name: Build workspace (release)
+        run: cargo build --release
+
+      # ── Run Criterion benchmarks (Rust-native parsers) ─────────────────
+      - name: Run Criterion benchmarks
+        run: cargo bench -p bench-native 2>&1 | tee criterion-output.txt
+
+      # ── Run cross-parser benchmarks via bench-runner ───────────────────
+      - name: Run bench-runner
+        run: |
+          cargo run --release -p bench-runner -- \
+            --config parsers.toml \
+            --corpus corpus \
+            --output results
+
+      # ── Publish to GitHub Pages ────────────────────────────────────────
+      - name: Store benchmark result (GitHub Action Benchmark)
+        if: github.ref == 'refs/heads/main'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: "TPTP Parser Arena"
+          tool: "customSmallerIsBetter"
+          output-file-path: results/gh-bench.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          benchmark-data-dir-path: dev/bench
+          comment-on-alert: true
+          alert-threshold: "130%"
+
+      # ── Upload HTML report as artifact ─────────────────────────────────
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: results/
+
+  # ── Deploy HTML report to GitHub Pages ───────────────────────────────────
+  deploy-report:
+    name: Deploy report to Pages
+    needs: benchmark
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Download report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-report
+          path: report/
+
+      - name: Commit report to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cp report/report.html report.html 2>/dev/null || true
+          cp report/results.json results.json 2>/dev/null || true
+          git add -A
+          git diff --cached --quiet || git commit -m "Update benchmark report"
+          git push

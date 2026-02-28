@@ -1,0 +1,8 @@
+[package]
+name = "mrs-tptp-wrapper"
+version = "0.1.0"
+edition = "2021"
+description = "CLI wrapper around mrs-tptp for cross-parser benchmarking"
+
+[dependencies]
+mrs-tptp = { path = "/home/hack/EDLA/git/mrs-tptp-parser" }

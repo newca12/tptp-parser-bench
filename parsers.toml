@@ -1,0 +1,57 @@
+# TPTP Parser Benchmarking Arena — Parser Configuration
+#
+# Each [[parsers]] entry defines a parser to benchmark.
+# To add a new parser:
+#   1. Add a [[parsers]] section below
+#   2. Set `run_cmd` to the command that parses a TPTP file
+#   3. Set `input_mode` to "file_arg" (file path as last argument) or "stdin"
+#   4. Build the parser, then run: cargo run -p bench-runner
+
+[settings]
+iterations = 50           # Number of timed iterations per file
+warmup_iterations = 5     # Warmup iterations (not timed)
+timeout_secs = 30         # Per-invocation timeout in seconds
+
+# ─── Rust Parsers ────────────────────────────────────────────────────────────
+
+[[parsers]]
+name = "tptp-nom"
+display_name = "tptp (nom, zero-copy)"
+language = "Rust"
+technique = "nom streaming parser"
+repository = "https://github.com/MichaelRawson/tptp"
+run_cmd = ["./target/release/tptp-nom-wrapper"]
+input_mode = "file_arg"
+enabled = true
+
+[[parsers]]
+name = "tptp-antlr"
+display_name = "tptp (ANTLR4)"
+language = "Rust"
+technique = "ANTLR4 generated parser"
+repository = "https://github.com/newca12/playground-rs/tree/main/tptp"
+run_cmd = ["./target/release/tptp-antlr-wrapper"]
+input_mode = "file_arg"
+enabled = true
+
+[[parsers]]
+name = "mrs-tptp"
+display_name = "mrs-tptp (winnow)"
+language = "Rust"
+technique = "winnow parser combinators"
+repository = "https://github.com/newca12/mrs-tptp-parser"
+run_cmd = ["./target/release/mrs-tptp-wrapper"]
+input_mode = "file_arg"
+enabled = true
+
+# ─── Template for adding new parsers ─────────────────────────────────────────
+#
+# [[parsers]]
+# name = "my-parser"
+# display_name = "My Parser (language)"
+# language = "Python"
+# technique = "PLY / lark / hand-written"
+# repository = "https://github.com/..."
+# run_cmd = ["python3", "parsers/my-parser/parse.py"]
+# input_mode = "file_arg"    # or "stdin"
+# enabled = true

@@ -1,0 +1,9 @@
+[package]
+name = "tptp-antlr-wrapper"
+version = "0.1.0"
+edition = "2021"
+description = "CLI wrapper around the ANTLR4-based TPTP parser for cross-parser benchmarking"
+
+[dependencies]
+tptp-antlr = { path = "/home/hack/EDLA/git/playground-rs/tptp", package = "tptp" }
+antlr4rust = "0.5.2"

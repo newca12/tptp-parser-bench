@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "bench-runner",
+    "bench-native",
+    "parsers/tptp-nom-wrapper",
+    "parsers/mrs-tptp-wrapper",
+    "parsers/tptp-antlr-wrapper",
+]
+resolver = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.bench]
+lto = true
+codegen-units = 1
