@@ -44,6 +44,42 @@ run_cmd = ["./target/release/mrs-tptp-wrapper"]
 input_mode = "file_arg"
 enabled = true
 
+# ─── C++ Parsers (via FFI) ──────────────────────────────────────────────────
+
+[[parsers]]
+name = "vampire-tptp"
+display_name = "Vampire TPTP (hand-written)"
+language = "C++"
+technique = "hand-written recursive descent"
+repository = "https://github.com/vprover/vampire"
+run_cmd = ["./target/release/vampire-tptp-wrapper"]
+input_mode = "file_arg"
+enabled = true
+
+# ─── Scala Parsers ──────────────────────────────────────────────────────────
+
+[[parsers]]
+name = "scala-tptp"
+display_name = "scala-tptp-parser (combinators)"
+language = "Scala"
+technique = "Scala parser combinators"
+repository = "https://github.com/leoprover/scala-tptp-parser"
+run_cmd = ["java", "-jar", "parsers/scala-tptp-wrapper/target/scala-2.13/scala-tptp-wrapper.jar"]
+input_mode = "file_arg"
+enabled = true
+
+# ─── Java Parsers ────────────────────────────────────────────────────────────
+
+[[parsers]]
+name = "java-antlr"
+display_name = "tptp (ANTLR4, Java)"
+language = "Java"
+technique = "ANTLR4 generated parser"
+repository = "https://github.com/newca12/playground-rs/tree/main/tptp"
+run_cmd = ["java", "-jar", "parsers/java-antlr-wrapper/target/java-antlr-wrapper.jar"]
+input_mode = "file_arg"
+enabled = true
+
 # ─── Template for adding new parsers ─────────────────────────────────────────
 #
 # [[parsers]]

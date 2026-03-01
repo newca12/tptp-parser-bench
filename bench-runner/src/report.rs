@@ -86,24 +86,26 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
 
     format!(
         r##"<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🏟️ TPTP Parser Arena</title>
+  <title>TPTP Parser Arena</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {{
-      --bg: #0d1117;
-      --surface: #161b22;
-      --surface2: #21262d;
-      --border: #30363d;
-      --text: #c9d1d9;
-      --text-muted: #8b949e;
-      --accent: #58a6ff;
-      --green: #3fb950;
-      --red: #f85149;
-      --orange: #d29922;
+      --bg: #ffffff;
+      --surface: #f6f8fa;
+      --surface2: #eef1f5;
+      --border: #d1d9e0;
+      --text: #1f2328;
+      --text-muted: #636c76;
+      --accent: #0969da;
+      --green: #1a7f37;
+      --red: #cf222e;
+      --gold: #bf8700;
+      --gold-bg: #fff8e1;
+      --gold-border: #f5c518;
     }}
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{
@@ -117,7 +119,6 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
     }}
     h1 {{ font-size: 2rem; margin-bottom: 0.25rem; }}
     h2 {{ font-size: 1.4rem; margin: 2rem 0 1rem; color: var(--accent); }}
-    h3 {{ font-size: 1.1rem; margin: 1.5rem 0 0.75rem; color: var(--text-muted); }}
     p.subtitle {{ color: var(--text-muted); margin-bottom: 2rem; }}
     a {{ color: var(--accent); text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
@@ -145,11 +146,11 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       font-size: 0.8rem;
       font-weight: 600;
     }}
-    .badge-rust {{ background: #b7410e22; color: #f97316; border: 1px solid #f9731644; }}
-    .badge-scala {{ background: #dc322f22; color: #dc322f; border: 1px solid #dc322f44; }}
-    .badge-python {{ background: #30699822; color: #ffd43b; border: 1px solid #ffd43b44; }}
-    .badge-java {{ background: #f8981d22; color: #f8981d; border: 1px solid #f8981d44; }}
-    .badge-c {{ background: #55555522; color: #a8b9cc; border: 1px solid #a8b9cc44; }}
+    .badge-rust {{ background: #fff0e6; color: #b7410e; border: 1px solid #f9731644; }}
+    .badge-scala {{ background: #fde8e8; color: #cf222e; border: 1px solid #dc322f44; }}
+    .badge-python {{ background: #fef9e7; color: #7d6608; border: 1px solid #f5c51844; }}
+    .badge-java {{ background: #fef3e2; color: #b45309; border: 1px solid #f8981d44; }}
+    .badge-c {{ background: #f0f0f0; color: #555555; border: 1px solid #99999944; }}
 
     .chart-controls {{
       display: flex;
@@ -158,36 +159,45 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       margin-bottom: 1rem;
       flex-wrap: wrap;
     }}
+    .chart-controls select, .chart-controls label {{
+      font-size: 0.9rem;
+    }}
     .chart-controls select {{
-      background: var(--surface2);
+      background: var(--bg);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 0.4rem 0.8rem;
-      font-size: 0.9rem;
     }}
+    .chart-controls input[type="checkbox"] {{ margin-right: 0.3rem; }}
+
     .chart-container {{
       position: relative;
       height: 320px;
       width: 100%;
     }}
-    .stats-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-top: 1rem;
-    }}
-    .stat-card {{
-      background: var(--surface2);
-      border-radius: 8px;
-      padding: 1rem;
-      text-align: center;
-    }}
-    .stat-value {{ font-size: 1.6rem; font-weight: 700; color: var(--accent); }}
-    .stat-label {{ font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }}
 
     .success {{ color: var(--green); }}
     .failure {{ color: var(--red); }}
+
+    tr.best-row {{
+      background: var(--gold-bg);
+    }}
+    tr.best-row td:first-child {{
+      border-left: 3px solid var(--gold-border);
+      font-weight: 700;
+    }}
+    .trophy {{ margin-right: 0.3rem; }}
+
+    .file-header td {{
+      background: var(--surface2);
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 0.5rem 1rem;
+    }}
 
     footer {{
       margin-top: 3rem;
@@ -200,7 +210,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
   </style>
 </head>
 <body>
-  <h1>🏟️ TPTP Parser Arena</h1>
+  <h1>TPTP Parser Arena</h1>
   <p class="subtitle">Benchmarking results for TPTP parsers across languages and techniques</p>
 
   <!-- Parser Table -->
@@ -224,6 +234,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       <select id="fileSelect" onchange="updateCharts()">
 {file_options}
       </select>
+      <label><input type="checkbox" id="logScale" checked onchange="updateCharts()"> Log scale</label>
     </div>
     <div class="chart-container">
       <canvas id="timeChart"></canvas>
@@ -231,7 +242,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
   </div>
 
   <!-- Throughput Chart -->
-  <h2>Throughput (MB/s)</h2>
+  <h2>Throughput</h2>
   <div class="card">
     <div class="chart-container">
       <canvas id="throughputChart"></canvas>
@@ -244,8 +255,8 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
     <table id="detailTable">
       <thead>
         <tr>
+          <th>Rank</th>
           <th>Parser</th>
-          <th>File</th>
           <th>Mean</th>
           <th>Std Dev</th>
           <th>Throughput</th>
@@ -265,10 +276,19 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
     const RAW = {results_json};
 
     const COLORS = [
-      '#ff6384', '#36a2eb', '#4bc0c0', '#ff9f40',
-      '#9966ff', '#ffcd56', '#c9cbcf', '#4dc9f6',
-      '#f67019', '#00a8e8', '#e8006f', '#00c49a',
+      '#4e79a7', '#f28e2b', '#e15759', '#76b7b2',
+      '#59a14f', '#edc948', '#b07aa1', '#ff9da7',
+      '#9c755f', '#bab0ac',
     ];
+    const BEST_COLOR = '#2da44e';
+    const BEST_BORDER = '#1a7f37';
+    const TROPHY = String.fromCodePoint(0x1F3C6);
+    const GOLD   = String.fromCodePoint(0x1F947);
+    const SILVER = String.fromCodePoint(0x1F948);
+    const BRONZE = String.fromCodePoint(0x1F949);
+    const CHECK  = String.fromCodePoint(0x2713);
+    const CROSS  = String.fromCodePoint(0x2717);
+    const PM     = String.fromCodePoint(0x00B1);
 
     // ── Derived structures ───────────────────────────────────────────────
     const parsers = [...new Set(RAW.map(r => r.display_name))];
@@ -281,6 +301,18 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       if (ns >= 1e6) return (ns / 1e6).toFixed(2) + ' ms';
       if (ns >= 1e3) return (ns / 1e3).toFixed(2) + ' µs';
       return ns.toFixed(0) + ' ns';
+    }}
+
+    function formatThroughput(mb_s) {{
+      if (mb_s >= 0.1) return mb_s.toFixed(2) + ' MB/s';
+      return (mb_s * 1000).toFixed(2) + ' KB/s';
+    }}
+
+    // Find the best (lowest mean_ns) parser for a given file
+    function bestForFile(file) {{
+      const forFile = RAW.filter(r => r.file_name === file && r.success);
+      if (forFile.length === 0) return null;
+      return forFile.reduce((a, b) => a.mean_ns < b.mean_ns ? a : b);
     }}
 
     // ── Charts ───────────────────────────────────────────────────────────
@@ -305,12 +337,13 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
           }},
           scales: {{
             x: {{
-              title: {{ display: true, text: 'Parse time', color: '#8b949e' }},
-              ticks: {{ color: '#8b949e', callback: (v) => formatNs(v) }},
-              grid: {{ color: '#30363d' }}
+              type: 'logarithmic',
+              title: {{ display: true, text: 'Parse time (log scale)', color: '#636c76' }},
+              ticks: {{ color: '#636c76', callback: (v) => formatNs(v) }},
+              grid: {{ color: '#e8e8e8' }}
             }},
             y: {{
-              ticks: {{ color: '#c9d1d9' }},
+              ticks: {{ color: '#1f2328' }},
               grid: {{ display: false }}
             }}
           }}
@@ -336,22 +369,23 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {{
-            legend: {{ labels: {{ color: '#c9d1d9' }} }},
+            legend: {{ labels: {{ color: '#1f2328' }} }},
             tooltip: {{
               callbacks: {{
-                label: (c) => c.dataset.label + ': ' + c.raw.toFixed(2) + ' MB/s'
+                label: (c) => c.dataset.label + ': ' + formatThroughput(c.raw)
               }}
             }}
           }},
           scales: {{
             x: {{
-              ticks: {{ color: '#8b949e' }},
-              grid: {{ color: '#30363d' }}
+              ticks: {{ color: '#636c76' }},
+              grid: {{ color: '#e8e8e8' }}
             }},
             y: {{
-              title: {{ display: true, text: 'MB/s', color: '#8b949e' }},
-              ticks: {{ color: '#8b949e' }},
-              grid: {{ color: '#30363d' }}
+              type: 'logarithmic',
+              title: {{ display: true, text: 'Throughput (log scale)', color: '#636c76' }},
+              ticks: {{ color: '#636c76', callback: (v) => formatThroughput(v) }},
+              grid: {{ color: '#e8e8e8' }}
             }}
           }}
         }}
@@ -360,31 +394,65 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
 
     function updateCharts() {{
       const file = document.getElementById('fileSelect').value;
+      const useLog = document.getElementById('logScale').checked;
       const filtered = RAW.filter(r => r.file_name === file && r.success);
 
-      timeChart.data.labels = filtered.map(r => r.display_name);
+      const best = bestForFile(file);
+      const bgColors = filtered.map((r, i) =>
+        best && r.display_name === best.display_name ? BEST_COLOR : colorFor(i)
+      );
+      const borderColors = filtered.map((r) =>
+        best && r.display_name === best.display_name ? BEST_BORDER : 'transparent'
+      );
+
+      timeChart.data.labels = filtered.map(r =>
+        best && r.display_name === best.display_name ? TROPHY + ' ' + r.display_name : r.display_name
+      );
       timeChart.data.datasets = [{{
         label: 'Mean parse time',
         data: filtered.map(r => r.mean_ns),
-        backgroundColor: filtered.map((_, i) => colorFor(i)),
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: filtered.map(r => best && r.display_name === best.display_name ? 2 : 0),
         borderRadius: 4,
       }}];
+
+      timeChart.options.scales.x.type = useLog ? 'logarithmic' : 'linear';
+      timeChart.options.scales.x.title.text = useLog ? 'Parse time (log scale)' : 'Parse time';
       timeChart.update();
     }}
 
     // ── Detail table ─────────────────────────────────────────────────────
     function populateDetailTable() {{
       const body = document.getElementById('detailBody');
-      body.innerHTML = RAW.map(r => `
-        <tr>
-          <td>${{r.display_name}}</td>
-          <td>${{r.file_name}}</td>
-          <td>${{r.success ? formatNs(r.mean_ns) : '—'}}</td>
-          <td>${{r.success ? '± ' + formatNs(r.stddev_ns) : '—'}}</td>
-          <td>${{r.success ? r.throughput_mb_s.toFixed(2) + ' MB/s' : '—'}}</td>
-          <td class="${{r.success ? 'success' : 'failure'}}">${{r.success ? '✓' : '✗ ' + (r.error || '')}}</td>
-        </tr>
-      `).join('');
+      let html = '';
+
+      for (const file of files) {{
+        const forFile = RAW.filter(r => r.file_name === file);
+        const successful = forFile.filter(r => r.success).sort((a, b) => a.mean_ns - b.mean_ns);
+        const failed = forFile.filter(r => !r.success);
+        const ranked = [...successful, ...failed];
+        const bestName = successful.length > 0 ? successful[0].display_name : null;
+
+        html += `<tr class="file-header"><td colspan="6">${{file}}</td></tr>`;
+
+        ranked.forEach((r, idx) => {{
+          const isBest = r.success && r.display_name === bestName;
+          const rank = r.success ? idx + 1 : 0;
+          const medal = rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : rank || '—';
+          html += `
+            <tr class="${{isBest ? 'best-row' : ''}}">
+              <td>${{medal}}</td>
+              <td>${{r.display_name}}</td>
+              <td>${{r.success ? formatNs(r.mean_ns) : '—'}}</td>
+              <td>${{r.success ? PM + ' ' + formatNs(r.stddev_ns) : '—'}}</td>
+              <td>${{r.success ? formatThroughput(r.throughput_mb_s) : '—'}}</td>
+              <td class="${{r.success ? 'success' : 'failure'}}">${{r.success ? CHECK : CROSS + ' ' + (r.error || '')}}</td>
+            </tr>`;
+        }});
+      }}
+
+      body.innerHTML = html;
     }}
 
     // ── Init ─────────────────────────────────────────────────────────────

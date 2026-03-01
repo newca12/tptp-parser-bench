@@ -8,7 +8,7 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use tptp::TPTPIterator;
-use mrs_tptp::parse_tptp;
+use mrs_tptp::TPTPIterator as MrsTPTPIterator;
 
 // ── Corpus files (embedded at compile time) ─────────────────────────────────
 
@@ -50,7 +50,11 @@ fn bench_tptp_nom(c: &mut Criterion) {
 // ── mrs-tptp crate (winnow parser combinators) ─────────────────────────────
 
 fn parse_with_mrs_tptp(content: &str) {
-    parse_tptp(content).expect("parse error");
+    let mut iter = MrsTPTPIterator::new(content);
+    for item in &mut iter {
+        item.expect("parse error");
+    }
+    assert!(iter.remaining().is_empty());
 }
 
 fn bench_mrs_tptp(c: &mut Criterion) {

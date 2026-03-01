@@ -5,4 +5,4 @@ edition = "2021"
 description = "CLI wrapper around mrs-tptp for cross-parser benchmarking"
 
 [dependencies]
-mrs-tptp = { path = "/home/hack/EDLA/git/mrs-tptp-parser" }
+mrs-tptp = { path = "/home/fr22192/EDLA/git/mrs-tptp-parser" }

@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -36,6 +38,27 @@ jobs:
       # ── Build all parser wrappers ──────────────────────────────────────
       - name: Build workspace (release)
         run: cargo build --release
+
+      # ── Build Scala parser wrapper (fat JAR) ────────────────────────────
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Cache sbt
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.sbt
+            ~/.cache/coursier
+            parsers/scala-tptp-wrapper/target
+            parsers/scala-tptp-wrapper/project/target
+          key: ${{ runner.os }}-sbt-${{ hashFiles('parsers/scala-tptp-wrapper/build.sbt', 'parsers/scala-tptp-wrapper/project/plugins.sbt') }}
+
+      - name: Build scala-tptp-wrapper
+        working-directory: parsers/scala-tptp-wrapper
+        run: sbt assembly
 
       # ── Run Criterion benchmarks (Rust-native parsers) ─────────────────
       - name: Run Criterion benchmarks

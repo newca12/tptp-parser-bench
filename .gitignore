@@ -1,7 +1,27 @@
 /target
 /results
+/results.previous*/
 Cargo.lock
 *.swp
 *.swo
 *~
 .DS_Store
+
+# IDE / editor
+.vscode/
+.metals/
+.scala-build/
+.bsp/
+.idea/
+
+# CMake / Vampire build
+/build/
+
+# Maven / Java
+parsers/java-antlr-wrapper/target/
+parsers/java-antlr-wrapper/dependency-reduced-pom.xml
+
+# sbt / Scala
+parsers/scala-tptp-wrapper/target/
+parsers/scala-tptp-wrapper/project/target/
+parsers/scala-tptp-wrapper/project/project/

@@ -85,11 +85,11 @@ fn main() -> Result<()> {
 
             if result.success {
                 println!(
-                    "  ✓ {} : {:.2} ms ± {:.2} ms ({:.2} MB/s)",
+                    "  ✓ {} : {:.2} ms ± {:.2} ms ({})",
                     result.file_name,
                     result.mean_ns / 1e6,
                     result.stddev_ns / 1e6,
-                    result.throughput_mb_s,
+                    format_throughput(result.throughput_mb_s),
                 );
             } else {
                 println!(
@@ -128,4 +128,13 @@ fn main() -> Result<()> {
 
     println!("\n✅ Done.");
     Ok(())
+}
+
+/// Format throughput with adaptive units (MB/s or KB/s).
+fn format_throughput(mb_s: f64) -> String {
+    if mb_s >= 0.1 {
+        format!("{:.2} MB/s", mb_s)
+    } else {
+        format!("{:.2} KB/s", mb_s * 1000.0)
+    }
 }

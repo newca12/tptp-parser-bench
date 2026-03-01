@@ -14,18 +14,26 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 | **tptp** (nom) | Rust | nom (zero-copy, streaming) | [MichaelRawson/tptp](https://github.com/MichaelRawson/tptp) |
 | **mrs-tptp** (winnow) | Rust | winnow parser combinators | [newca12/mrs-tptp-parser](https://github.com/newca12/mrs-tptp-parser) |
 | **tptp** (ANTLR4) | Rust | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
+| **Vampire TPTP** (hand-written) | C++ | hand-written recursive descent | [vprover/vampire](https://github.com/vprover/vampire) |
+| **tptp** (ANTLR4, Java) | Java | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
+| **scala-tptp-parser** (combinators) | Scala | Scala parser combinators | [leoprover/scala-tptp-parser](https://github.com/leoprover/scala-tptp-parser) |
 
 ## Quick Start
 
 ```bash
-# Build everything
+# Build everything (Vampire parser requires CMake and a C++17 compiler)
 cargo build --release
+
+# Build Java ANTLR4 parser wrapper (requires JDK 11+, Maven)
+cd parsers/java-antlr-wrapper && mvn -q package && cd ../..
+
+# Build Scala parser wrapper (requires JDK 11+, sbt)
+cd parsers/scala-tptp-wrapper && sbt assembly && cd ../..
 
 # Run Criterion benchmarks (Rust parsers only, statistically rigorous)
 cargo bench -p bench-native
 
 # Run cross-parser benchmarks and generate HTML report
-cargo run --release -p bench-runner
 
 # Open the report
 open results/report.html    # macOS
@@ -55,7 +63,10 @@ tptp-parser-bench/
 ├── parsers/
 │   ├── tptp-nom-wrapper/   # CLI wrapper for MichaelRawson/tptp
 │   ├── mrs-tptp-wrapper/   # CLI wrapper for mrs-tptp (winnow)
-│   └── tptp-antlr-wrapper/ # CLI wrapper for ANTLR4 parser
+│   ├── tptp-antlr-wrapper/ # CLI wrapper for ANTLR4 parser
+│   ├── vampire-tptp-wrapper/ # CLI wrapper for Vampire's TPTP parser (C++)
+│   ├── java-antlr-wrapper/  # CLI wrapper for ANTLR4 parser (Java)
+│   └── scala-tptp-wrapper/ # CLI wrapper for scala-tptp-parser (JVM)
 ├── results/                # Generated reports (git-ignored)
 └── .github/workflows/
     └── bench.yml           # CI: run benchmarks → GitHub Pages

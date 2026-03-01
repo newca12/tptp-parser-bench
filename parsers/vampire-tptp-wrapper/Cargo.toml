@@ -1,0 +1,9 @@
+[package]
+name = "vampire-tptp-wrapper"
+version = "0.1.0"
+edition = "2021"
+links = "vampire"
+
+[build-dependencies]
+cmake = "0.1"
+cc = "1"
