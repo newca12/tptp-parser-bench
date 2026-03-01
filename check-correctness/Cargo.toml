@@ -1,0 +1,20 @@
+[package]
+name = "check-correctness"
+version = "0.1.0"
+edition = "2021"
+description = "Correctness checker for TPTP parsers: roundtrip + cross-validation"
+
+[[bin]]
+name = "check-correctness"
+path = "src/main.rs"
+
+[dependencies]
+# In-process Rust parsers
+mrs-tptp = { path = "/home/fr22192/EDLA/git/mrs-tptp-parser" }
+tptp = "0.31"
+tptp-antlr = { path = "/home/fr22192/EDLA/git/playground-rs/tptp", package = "tptp" }
+antlr4rust = "0.5.2"
+
+# CLI and utilities
+clap = { version = "4", features = ["derive"] }
+rayon = "1"

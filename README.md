@@ -60,6 +60,12 @@ tptp-parser-bench/
 │       ├── config.rs       # TOML config parser
 │       ├── runner.rs       # Process-based benchmark engine
 │       └── report.rs       # HTML + JSON report generator
+├── check-correctness/      # Correctness checker (roundtrip + cross-validation)
+│   └── src/
+│       ├── main.rs         # CLI entry point
+│       ├── runner.rs       # Parallel execution engine
+│       ├── parsers.rs      # ParserBackend trait + subprocess output parser
+│       └── parsers/        # Per-parser backend implementations
 ├── parsers/
 │   ├── tptp-nom-wrapper/   # CLI wrapper for MichaelRawson/tptp
 │   ├── mrs-tptp-wrapper/   # CLI wrapper for mrs-tptp (winnow)
@@ -121,6 +127,37 @@ Process-based benchmarking that works with any parser exposed as a CLI.
 Measures wall-clock time including process startup overhead.
 
 Results: `results/report.html` (interactive Chart.js dashboard).
+
+### `check-correctness` (Manual)
+
+Correctness checker that recursively parses all `.p` files in a folder and
+verifies results via roundtrip testing or cross-validation against the
+mrs-tptp reference parser.
+
+```bash
+# Build
+cargo build --release -p check-correctness
+
+# Usage
+./target/release/check-correctness <parser> <folder> [--timeout <ms>] [--threads <n>] [--verbose]
+```
+
+Available parsers: `mrs-tptp`, `tptp-nom`, `tptp-antlr`, `vampire-tptp`, `scala-tptp`, `java-antlr`.
+
+Parsers with pretty-printing support (mrs-tptp, tptp-nom, scala-tptp) use
+roundtrip verification: parse, pretty-print, reparse, compare. Parsers
+without pretty-printing (tptp-antlr, vampire-tptp, java-antlr) cross-validate
+formula and include counts against the mrs-tptp reference.
+
+The subprocess-based parsers (vampire-tptp, scala-tptp, java-antlr) require
+their wrappers to be built first (see Quick Start).
+
+Example:
+
+```bash
+./target/release/check-correctness mrs-tptp corpus/
+./target/release/check-correctness tptp-nom /path/to/TPTP/Problems --timeout 5000 --threads 4
+```
 
 ## Configuration
 
