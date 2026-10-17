@@ -6,9 +6,9 @@
 //! each file in the corpus. Additional Rust parsers can be added here as
 //! library dependencies.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use tptp::TPTPIterator;
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use mrs_tptp::TPTPIterator as MrsTPTPIterator;
+use tptp::TPTPIterator;
 
 // ── Corpus files (embedded at compile time) ─────────────────────────────────
 

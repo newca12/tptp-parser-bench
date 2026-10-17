@@ -1,10 +1,12 @@
 use crate::config::{InputMode, ParserConfig, Settings};
-use anyhow::Context;
 use serde::Serialize;
+use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use wait_timeout::ChildExt;
 
 /// Result of benchmarking one parser on one file.
 #[derive(Debug, Serialize, Clone)]
@@ -25,20 +27,19 @@ pub struct BenchResult {
 }
 
 /// Run the benchmark: warmup + timed iterations.
-pub fn run_benchmark(
-    parser: &ParserConfig,
-    file_path: &Path,
-    settings: &Settings,
-) -> BenchResult {
-    let file_name = file_path
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Settings) -> BenchResult {
+    let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
     let file_size = std::fs::metadata(file_path).map(|m| m.len()).unwrap_or(0);
     let file_content = std::fs::read(file_path).ok();
 
+    if matches!(parser.input_mode, InputMode::Stdin) && file_content.is_none() {
+        return make_error_result(parser, &file_name, file_size, "failed to read input file");
+    }
+
     // Check that the parser command exists before running iterations.
+    if parser.run_cmd.is_empty() {
+        return make_error_result(parser, &file_name, file_size, "run_cmd must not be empty");
+    }
     if let Err(e) = which_or_exists(&parser.run_cmd[0]) {
         return make_error_result(parser, &file_name, file_size, &e);
     }
@@ -107,7 +108,7 @@ fn run_once(
     file_path: &Path,
     file_content: Option<&[u8]>,
     timeout_secs: u64,
-) -> anyhow::Result<Duration> {
+) -> crate::Result<Duration> {
     let program = &parser.run_cmd[0];
     let args = &parser.run_cmd[1..];
 
@@ -125,34 +126,126 @@ fn run_once(
     }
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
 
     let start = Instant::now();
-    let mut child = cmd.spawn().context("failed to spawn parser process")?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|error| io::Error::other(format!("failed to spawn parser process: {error}")))?;
+    let stderr_reader = child.stderr.take().map(|mut stderr| {
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut stderr, &mut bytes);
+            let _ = sender.send(bytes);
+        });
+        receiver
+    });
 
     // Pipe file content to stdin if needed.
-    if let InputMode::Stdin = parser.input_mode {
-        if let (Some(mut stdin), Some(content)) = (child.stdin.take(), file_content) {
-            stdin.write_all(content)?;
-            // Drop stdin to signal EOF.
-            drop(stdin);
+    let stdin_writer = if let InputMode::Stdin = parser.input_mode {
+        let stdin = child.stdin.take();
+        let content = file_content.map(ToOwned::to_owned);
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = (|| -> std::io::Result<()> {
+                if let (Some(mut stdin), Some(content)) = (stdin, content) {
+                    stdin.write_all(&content)?;
+                }
+                Ok(())
+            })();
+            let _ = sender.send(result);
+        });
+        Some(receiver)
+    } else {
+        None
+    };
+
+    let status = match child.wait_timeout(Duration::from_secs(timeout_secs)) {
+        Err(error) => {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(-(child.id() as i32), libc::SIGKILL);
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(
+                io::Error::other(format!("failed waiting for parser process: {error}")).into(),
+            );
+        }
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(-(child.id() as i32), libc::SIGKILL);
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("timeout after {}s", timeout_secs),
+            )
+            .into());
+        }
+    };
+
+    if let Some(writer) = stdin_writer {
+        let remaining = Duration::from_secs(timeout_secs).saturating_sub(start.elapsed());
+        match writer.recv_timeout(remaining) {
+            Ok(result) => result?,
+            Err(_) => {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(-(child.id() as i32), libc::SIGKILL);
+                }
+                let _ = child.kill();
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("timeout after {}s", timeout_secs),
+                )
+                .into());
+            }
         }
     }
 
-    let output = child
-        .wait_with_output()
-        .context("failed to wait for parser")?;
+    let stderr = if let Some(reader) = stderr_reader {
+        let remaining = Duration::from_secs(timeout_secs).saturating_sub(start.elapsed());
+        match reader.recv_timeout(remaining) {
+            Ok(stderr) => stderr,
+            Err(_) => {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(-(child.id() as i32), libc::SIGKILL);
+                }
+                let _ = child.kill();
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!("timeout after {}s", timeout_secs),
+                )
+                .into());
+            }
+        }
+    } else {
+        Vec::new()
+    };
     let elapsed = start.elapsed();
 
     if elapsed > Duration::from_secs(timeout_secs) {
-        anyhow::bail!("timeout after {}s", timeout_secs);
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!("timeout after {}s", timeout_secs),
+        )
+        .into());
     }
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!(
-            "parser exited with {}: {}",
-            output.status,
-            stderr.trim()
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr);
+        return Err(
+            io::Error::other(format!("parser exited with {}: {}", status, stderr.trim())).into(),
         );
     }
 
@@ -166,7 +259,11 @@ fn stats(times_ns: &[u128]) -> (f64, f64) {
     }
     let n = times_ns.len() as f64;
     let mean = times_ns.iter().sum::<u128>() as f64 / n;
-    let variance = times_ns.iter().map(|&t| (t as f64 - mean).powi(2)).sum::<f64>() / n;
+    let variance = times_ns
+        .iter()
+        .map(|&t| (t as f64 - mean).powi(2))
+        .sum::<f64>()
+        / n;
     (mean, variance.sqrt())
 }
 

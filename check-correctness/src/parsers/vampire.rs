@@ -1,4 +1,4 @@
-use crate::parsers::{parse_check_output, ParserBackend, VerificationMode};
+use crate::parsers::{ParserBackend, VerificationMode, parse_check_output};
 use crate::types::ParseResult;
 use std::path::{Path, PathBuf};
 use std::process::Command;

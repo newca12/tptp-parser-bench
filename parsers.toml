@@ -54,7 +54,7 @@ technique = "hand-written recursive descent"
 repository = "https://github.com/vprover/vampire"
 run_cmd = ["./target/release/vampire-tptp-wrapper"]
 input_mode = "file_arg"
-enabled = true
+enabled = false # Optional native build; see README.md
 
 # ─── Scala Parsers ──────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ display_name = "scala-tptp-parser (combinators)"
 language = "Scala"
 technique = "Scala parser combinators"
 repository = "https://github.com/leoprover/scala-tptp-parser"
-run_cmd = ["java", "-jar", "parsers/scala-tptp-wrapper/target/scala-2.13/scala-tptp-wrapper.jar"]
+run_cmd = ["java", "-jar", "parsers/scala-tptp-wrapper/target/scala-3.9.0/scala-tptp-wrapper.jar"]
 input_mode = "file_arg"
 enabled = true
 

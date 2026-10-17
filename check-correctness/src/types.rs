@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 /// Result of parsing a single file
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum ParseResult {
     /// Parse + verification succeeded
     Success {
@@ -16,18 +16,11 @@ pub enum ParseResult {
         error: String,
     },
     /// Parse itself failed
-    Failed {
-        elapsed_ms: f64,
-        error: String,
-    },
+    Failed { elapsed_ms: f64, error: String },
     /// Could not read file
-    ReadError {
-        error: String,
-    },
+    ReadError { error: String },
     /// File exceeded timeout
-    Timeout {
-        timeout_ms: u64,
-    },
+    Timeout { timeout_ms: u64 },
 }
 
 /// Complete result for one file

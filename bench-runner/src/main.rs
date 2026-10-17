@@ -2,9 +2,13 @@ mod config;
 mod report;
 mod runner;
 
-use anyhow::Result;
 use clap::Parser;
+use std::error::Error;
+use std::io;
 use std::path::PathBuf;
+
+pub type BenchError = Box<dyn Error + Send + Sync>;
+pub type Result<T> = std::result::Result<T, BenchError>;
 
 /// 🏟️  TPTP Parser Benchmarking Arena
 ///
@@ -39,7 +43,9 @@ fn main() -> Result<()> {
     if enabled.is_empty() {
         eprintln!("⚠  No enabled parsers found in {}", cli.config.display());
         eprintln!("   Edit parsers.toml and set enabled = true for at least one parser.");
-        return Ok(());
+        return Err(
+            io::Error::new(io::ErrorKind::InvalidInput, "no enabled parsers configured").into(),
+        );
     }
 
     // Collect corpus files.
@@ -57,11 +63,8 @@ fn main() -> Result<()> {
     corpus_files.sort();
 
     if corpus_files.is_empty() {
-        eprintln!(
-            "⚠  No .p or .tptp files found in {}",
-            cli.corpus.display()
-        );
-        return Ok(());
+        eprintln!("⚠  No .p or .tptp files found in {}", cli.corpus.display());
+        return Err(io::Error::new(io::ErrorKind::NotFound, "no TPTP corpus files found").into());
     }
 
     // Print banner.
@@ -127,6 +130,14 @@ fn main() -> Result<()> {
     }
 
     println!("\n✅ Done.");
+    let failed = all_results.iter().filter(|result| !result.success).count();
+    if failed > 0 {
+        return Err(io::Error::other(format!(
+            "{} benchmark case(s) failed; see the results above and report",
+            failed
+        ))
+        .into());
+    }
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-use crate::parsers::{parse_check_output, ParserBackend, VerificationMode};
+use crate::parsers::{ParserBackend, VerificationMode, parse_check_output};
 use crate::types::ParseResult;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -11,7 +11,7 @@ pub struct ScalaTptpBackend {
 impl ScalaTptpBackend {
     pub fn new() -> Result<Self, String> {
         let path =
-            PathBuf::from("parsers/scala-tptp-wrapper/target/scala-2.13/scala-tptp-wrapper.jar");
+            PathBuf::from("parsers/scala-tptp-wrapper/target/scala-3.9.0/scala-tptp-wrapper.jar");
         if !path.exists() {
             return Err(format!(
                 "scala-tptp-wrapper.jar not found at {}. Build with: cd parsers/scala-tptp-wrapper && sbt assembly",

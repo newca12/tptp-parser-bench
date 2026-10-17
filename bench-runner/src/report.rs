@@ -1,10 +1,9 @@
 use crate::runner::BenchResult;
-use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
 /// Generate an interactive HTML report with Chart.js from benchmark results.
-pub fn generate_html_report(results: &[BenchResult], output_path: &Path) -> Result<()> {
+pub fn generate_html_report(results: &[BenchResult], output_path: &Path) -> crate::Result<()> {
     let results_json = serde_json::to_string(results)?;
     let html = build_html(&results_json, results);
     std::fs::write(output_path, html)?;
@@ -47,9 +46,12 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
     // Collect unique parsers and files for the overview.
     let mut parsers: BTreeMap<String, (&str, &str, &str, &str)> = BTreeMap::new();
     for r in results {
-        parsers
-            .entry(r.parser_name.clone())
-            .or_insert((&r.display_name, &r.language, &r.technique, &r.parser_name));
+        parsers.entry(r.parser_name.clone()).or_insert((
+            &r.display_name,
+            &r.language,
+            &r.technique,
+            &r.parser_name,
+        ));
     }
 
     let parser_rows: String = parsers

@@ -1,7 +1,7 @@
 [package]
 name = "bench-native"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Criterion micro-benchmarks for Rust-native TPTP parsers"
 
 [lib]
@@ -9,9 +9,9 @@ name = "bench_native"
 path = "src/lib.rs"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-tptp = "0.31"
-mrs-tptp = { path = "/home/fr22192/EDLA/git/mrs-tptp-parser" }
+criterion = { version = "=0.8.2", features = ["html_reports"] }
+tptp = "=0.31.1"
+mrs-tptp = "=0.2.3"
 
 [[bench]]
 name = "tptp_parsers"

@@ -6,9 +6,9 @@ members = [
     "parsers/tptp-nom-wrapper",
     "parsers/mrs-tptp-wrapper",
     "parsers/tptp-antlr-wrapper",
-    "parsers/vampire-tptp-wrapper",
 ]
-resolver = "2"
+exclude = ["parsers/vampire-tptp-wrapper"]
+resolver = "3"
 
 [profile.release]
 lto = true

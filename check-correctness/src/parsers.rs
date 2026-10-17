@@ -34,20 +34,26 @@ pub trait ParserBackend: Send + Sync {
 pub fn parse_check_output(stdout: &str, elapsed_ms: f64) -> ParseResult {
     let line = stdout.trim();
     if line.starts_with("OK") {
-        let mut formula_count = 0;
-        let mut include_count = 0;
+        let mut formula_count = None;
+        let mut include_count = None;
         for part in line.split_whitespace() {
             if let Some(val) = part.strip_prefix("formulas=") {
-                formula_count = val.parse().unwrap_or(0);
+                formula_count = val.parse().ok();
             }
             if let Some(val) = part.strip_prefix("includes=") {
-                include_count = val.parse().unwrap_or(0);
+                include_count = val.parse().ok();
             }
         }
-        ParseResult::Success {
-            formula_count,
-            include_count,
-            elapsed_ms,
+        match (formula_count, include_count) {
+            (Some(formula_count), Some(include_count)) => ParseResult::Success {
+                formula_count,
+                include_count,
+                elapsed_ms,
+            },
+            _ => ParseResult::Failed {
+                elapsed_ms,
+                error: format!("Malformed check output: {}", line),
+            },
         }
     } else if line.starts_with("ROUNDTRIP_FAIL") {
         let mut formula_count = 0;

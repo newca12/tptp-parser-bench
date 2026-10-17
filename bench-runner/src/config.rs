@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::io;
 
 /// Top-level configuration loaded from `parsers.toml`.
 #[derive(Debug, Deserialize, Clone)]
@@ -64,9 +64,32 @@ fn default_true() -> bool {
 
 impl Config {
     /// Load configuration from a TOML file.
-    pub fn load(path: &PathBuf) -> anyhow::Result<Self> {
+    pub fn load(path: &std::path::Path) -> crate::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let config: Config = toml::from_str(&content)?;
+        if config.settings.iterations == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "settings.iterations must be greater than zero",
+            )
+            .into());
+        }
+        if config.settings.timeout_secs == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "settings.timeout_secs must be greater than zero",
+            )
+            .into());
+        }
+        for parser in &config.parsers {
+            if parser.run_cmd.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("parser '{}' has an empty run_cmd", parser.name),
+                )
+                .into());
+            }
+        }
         Ok(config)
     }
 

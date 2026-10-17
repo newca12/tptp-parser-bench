@@ -13,9 +13,9 @@ use std::process;
 use tptp_antlr::tptplexer::TPTPLexer;
 use tptp_antlr::tptpparser::TPTPParser;
 
+use antlr4rust::InputStream;
 use antlr4rust::common_token_stream::CommonTokenStream;
 use antlr4rust::token_factory::CommonTokenFactory;
-use antlr4rust::InputStream;
 
 fn main() {
     let path = match env::args().nth(1) {

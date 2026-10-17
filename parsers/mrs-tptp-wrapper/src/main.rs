@@ -5,10 +5,10 @@
 //! Reads the given TPTP file and parses it. Exits 0 on success, 1 on
 //! parse error. Produces no output on success (designed for timing).
 
+use mrs_tptp::parse_tptp;
 use std::env;
 use std::fs;
 use std::process;
-use mrs_tptp::parse_tptp;
 
 fn main() {
     let path = match env::args().nth(1) {

@@ -3,9 +3,9 @@ use crate::types::ParseResult;
 use std::path::Path;
 use std::time::Instant;
 
+use antlr4rust::InputStream;
 use antlr4rust::common_token_stream::CommonTokenStream;
 use antlr4rust::token_factory::CommonTokenFactory;
-use antlr4rust::InputStream;
 use tptp_antlr::tptplexer::TPTPLexer;
 use tptp_antlr::tptpparser::{TPTPParser, Tptp_fileContextAttrs, Tptp_inputContextAttrs};
 
@@ -26,7 +26,7 @@ impl ParserBackend for TptpAntlrBackend {
             Err(e) => {
                 return ParseResult::ReadError {
                     error: format!("Read error: {}", e),
-                }
+                };
             }
         };
 

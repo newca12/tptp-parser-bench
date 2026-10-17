@@ -1,8 +1,8 @@
 [package]
 name = "tptp-nom-wrapper"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Thin CLI wrapper around the tptp crate for cross-parser benchmarking"
 
 [dependencies]
-tptp = "0.31"
+tptp = "=0.31.1"

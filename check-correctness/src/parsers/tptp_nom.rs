@@ -2,8 +2,8 @@ use crate::parsers::{ParserBackend, VerificationMode};
 use crate::types::ParseResult;
 use std::path::Path;
 use std::time::Instant;
-use tptp::top::{AnnotatedFormula, TPTPInput};
 use tptp::TPTPIterator;
+use tptp::top::{AnnotatedFormula, TPTPInput};
 
 pub struct TptpNomBackend;
 
@@ -22,7 +22,7 @@ impl ParserBackend for TptpNomBackend {
             Err(e) => {
                 return ParseResult::ReadError {
                     error: format!("Read error: {}", e),
-                }
+                };
             }
         };
 
@@ -77,10 +77,7 @@ impl ParserBackend for TptpNomBackend {
                 return ParseResult::RoundtripFail {
                     formula_count,
                     elapsed_ms,
-                    error: format!(
-                        "Failed to reparse '{}':\n  Original: {}",
-                        name, text
-                    ),
+                    error: format!("Failed to reparse '{}':\n  Original: {}", name, text),
                 };
             }
 
@@ -102,10 +99,7 @@ impl ParserBackend for TptpNomBackend {
                     return ParseResult::RoundtripFail {
                         formula_count,
                         elapsed_ms,
-                        error: format!(
-                            "Failed to reparse '{}':\n  Original: {}",
-                            name, text
-                        ),
+                        error: format!("Failed to reparse '{}':\n  Original: {}", name, text),
                     };
                 }
             }

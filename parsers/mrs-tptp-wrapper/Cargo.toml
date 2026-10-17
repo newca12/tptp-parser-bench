@@ -1,8 +1,8 @@
 [package]
 name = "mrs-tptp-wrapper"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "CLI wrapper around mrs-tptp for cross-parser benchmarking"
 
 [dependencies]
-mrs-tptp = { path = "/home/fr22192/EDLA/git/mrs-tptp-parser" }
+mrs-tptp = "=0.2.3"

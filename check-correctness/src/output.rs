@@ -62,7 +62,7 @@ pub fn print_summary(summary: &CheckSummary, verbose: bool) {
     println!();
     println!("Total files:      {}", summary.total_files);
     println!(
-        "Successful:       {} ({:.1}%)",
+        "Verified:         {} ({:.1}%)",
         summary.successful,
         if summary.total_files > 0 {
             (summary.successful as f64 / summary.total_files as f64) * 100.0
@@ -150,7 +150,6 @@ pub fn print_summary(summary: &CheckSummary, verbose: bool) {
         std::process::exit(1);
     } else {
         println!();
-        println!("\u{2713} All files parsed successfully!");
-        println!("\u{2713} Parsing-reparsing comparison successful for all files.");
+        println!("\u{2713} All files parsed and verified successfully!");
     }
 }

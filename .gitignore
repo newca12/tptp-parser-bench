@@ -1,7 +1,6 @@
 /target
 /results
 /results.previous*/
-Cargo.lock
 *.swp
 *.swo
 *~

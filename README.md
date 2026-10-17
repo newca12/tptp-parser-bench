@@ -3,7 +3,7 @@
 A benchmarking arena for comparing TPTP parser implementations across
 languages and techniques.
 
-Built in Rust with [Criterion](https://crates.io/crates/criterion) for
+Built with Rust 2024, [Criterion](https://crates.io/crates/criterion) for
 precise micro-benchmarks and a custom runner for cross-language comparison.
 Results are published to GitHub Pages as interactive Chart.js dashboards.
 
@@ -12,7 +12,7 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 | Parser | Language | Technique | Repository |
 |--------|----------|-----------|------------|
 | **tptp** (nom) | Rust | nom (zero-copy, streaming) | [MichaelRawson/tptp](https://github.com/MichaelRawson/tptp) |
-| **mrs-tptp** (winnow) | Rust | winnow parser combinators | [newca12/mrs-tptp-parser](https://github.com/newca12/mrs-tptp-parser) |
+| **mrs-tptp** (winnow) | Rust | winnow parser combinators | [newca12/mrs](https://github.com/newca12/mrs) |
 | **tptp** (ANTLR4) | Rust | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
 | **Vampire TPTP** (hand-written) | C++ | hand-written recursive descent | [vprover/vampire](https://github.com/vprover/vampire) |
 | **tptp** (ANTLR4, Java) | Java | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
@@ -21,8 +21,18 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 ## Quick Start
 
 ```bash
-# Build everything (Vampire parser requires CMake and a C++17 compiler)
+# Clone with the Vampire source submodule (needed only for its optional wrapper)
+git clone --recurse-submodules https://github.com/newca12/tptp-parser-bench.git
+cd tptp-parser-bench
+
+# Build Rust workspace tools and Rust parser wrappers
 cargo build --release
+
+# The JVM wrappers need JDK 11+ both to build and to run. Select JDK 25
+# before building them (adjust JAVA_HOME for your installation path).
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
 
 # Build Java ANTLR4 parser wrapper (requires JDK 11+, Maven)
 cd parsers/java-antlr-wrapper && mvn -q package && cd ../..
@@ -33,7 +43,8 @@ cd parsers/scala-tptp-wrapper && sbt assembly && cd ../..
 # Run Criterion benchmarks (Rust parsers only, statistically rigorous)
 cargo bench -p bench-native
 
-# Run cross-parser benchmarks and generate HTML report
+# Run cross-parser benchmarks and generate the report
+cargo run --release -p bench-runner
 
 # Open the report
 open results/report.html    # macOS
@@ -127,6 +138,18 @@ Process-based benchmarking that works with any parser exposed as a CLI.
 Measures wall-clock time including process startup overhead.
 
 Results: `results/report.html` (interactive Chart.js dashboard).
+The runner exits non-zero if any enabled parser/file combination fails.
+
+The Vampire C++ wrapper is optional because it compiles most of Vampire's
+large native codebase. It is disabled by default in `parsers.toml` and excluded
+from normal workspace builds to keep routine builds within a predictable
+resource budget. To opt in, initialize the submodule, build it with one job,
+then set `enabled = true` for `vampire-tptp`:
+
+```bash
+git submodule update --init --recursive
+cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml -j 1
+```
 
 ### `check-correctness` (Manual)
 
@@ -151,6 +174,8 @@ formula and include counts against the mrs-tptp reference.
 
 The subprocess-based parsers (vampire-tptp, scala-tptp, java-antlr) require
 their wrappers to be built first (see Quick Start).
+When `--timeout` is supplied, each file check runs in a worker process; on Unix,
+the checker terminates the worker and its subprocesses when the limit is exceeded.
 
 Example:
 
@@ -174,7 +199,7 @@ timeout_secs = 30         # Per-invocation timeout
 
 On push to `main`, the CI workflow:
 
-1. Builds all parsers
+1. Builds the Rust workspace and enabled parser wrappers (Vampire is opt-in)
 2. Runs Criterion and bench-runner benchmarks
 3. Publishes time-series charts via
    [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark)

@@ -21,7 +21,7 @@ impl ParserBackend for MrsTptpBackend {
             Err(e) => {
                 return ParseResult::ReadError {
                     error: format!("Read error: {}", e),
-                }
+                };
             }
         };
 
@@ -41,19 +41,30 @@ impl ParserBackend for MrsTptpBackend {
 
                     match parse_tptp(&pretty) {
                         Ok(reparsed_problem) => {
-                            if reparsed_problem.formulas.len() == 1 {
-                                let reparsed_pretty =
-                                    reparsed_problem.formulas[0].to_string();
-                                if pretty != reparsed_pretty {
-                                    return ParseResult::RoundtripFail {
-                                        formula_count,
-                                        elapsed_ms,
-                                        error: format!(
-                                            "Round-trip mismatch for '{}':\n  Original:  {}\n  Reparsed:  {}",
-                                            name, pretty, reparsed_pretty
-                                        ),
-                                    };
-                                }
+                            if reparsed_problem.formulas.len() != 1
+                                || !reparsed_problem.includes.is_empty()
+                            {
+                                return ParseResult::RoundtripFail {
+                                    formula_count,
+                                    elapsed_ms,
+                                    error: format!(
+                                        "Reparsing '{}' yielded {} formulas and {} includes; expected exactly one formula",
+                                        name,
+                                        reparsed_problem.formulas.len(),
+                                        reparsed_problem.includes.len()
+                                    ),
+                                };
+                            }
+                            let reparsed_pretty = reparsed_problem.formulas[0].to_string();
+                            if pretty != reparsed_pretty {
+                                return ParseResult::RoundtripFail {
+                                    formula_count,
+                                    elapsed_ms,
+                                    error: format!(
+                                        "Round-trip mismatch for '{}':\n  Original:  {}\n  Reparsed:  {}",
+                                        name, pretty, reparsed_pretty
+                                    ),
+                                };
                             }
                         }
                         Err(e) => {
