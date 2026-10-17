@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 # In-process Rust parsers
-mrs-tptp = "=0.2.3"
+mrs-tptp = "=0.3.0"
 tptp = "=0.31.1"
 tptp-antlr = { git = "https://github.com/newca12/playground-rs.git", rev = "00428cd44348a3e05254e1834ea4a0ae3dba7a5f", package = "tptp" }
 antlr4rust = "=0.6.0"

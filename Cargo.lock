@@ -522,9 +522,9 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "mrs-tptp"
-version = "0.2.3"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d43794342707b909b72242c3e15956060af094b59e48e6cacc812d8430270130"
+checksum = "ef05f64d9be7d97ffd18b60cfe7a8c985db6775caf1aa140b2416166c5441515"
 dependencies = [
  "winnow",
 ]

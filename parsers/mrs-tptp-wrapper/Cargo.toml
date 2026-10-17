@@ -5,4 +5,4 @@ edition = "2024"
 description = "CLI wrapper around mrs-tptp for cross-parser benchmarking"
 
 [dependencies]
-mrs-tptp = "=0.2.3"
+mrs-tptp = "=0.3.0"
