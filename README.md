@@ -20,6 +20,21 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 
 ## Quick Start
 
+### With Nix
+
+On NixOS or any system with the Nix flake command enabled, enter the project
+environment with:
+
+```bash
+nix develop
+```
+
+The shell provides Rust, JDK 25, Maven, sbt, and the native build tools used by
+the parser wrappers. Then use the build and run commands below. The Vampire
+wrapper remains optional and requires its git submodule.
+
+### Without Nix
+
 ```bash
 # Clone with the Vampire source submodule (needed only for its optional wrapper)
 git clone --recurse-submodules https://github.com/newca12/tptp-parser-bench.git

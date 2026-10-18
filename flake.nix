@@ -1,0 +1,53 @@
+{
+  description = "Development environment for the TPTP Parser Arena";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.rust-overlay = {
+    url = "github:oxalica/rust-overlay";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, rust-overlay }:
+    let
+      systems = [ "x86_64-linux" "aarch64-linux" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+    in
+    {
+      devShells = forAllSystems (system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
+          rust = pkgs.rust-bin.stable."1.99.1".default.override {
+            extensions = [ "rustfmt" "clippy" ];
+          };
+        in
+        {
+          default = pkgs.mkShell {
+            packages = with pkgs; [
+              rust
+              jdk25
+              maven
+              sbt
+              cmake
+              gcc
+              gnumake
+              pkg-config
+              git
+              nixpkgs-fmt
+            ];
+
+            JAVA_HOME = "${pkgs.jdk25}";
+
+            shellHook = ''
+              printf '%s\n' "TPTP Parser Arena development environment"
+              printf 'Rust: %s\n' "$(rustc --version)"
+              printf 'Java: %s\n' "$(java -version 2>&1 | head -n 1)"
+            '';
+          };
+        });
+
+      formatter = forAllSystems (system: (import nixpkgs { inherit system; }).nixpkgs-fmt);
+    };
+}
