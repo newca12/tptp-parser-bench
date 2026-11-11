@@ -22,20 +22,21 @@
           rust = pkgs.rust-bin.stable."1.99.1".default.override {
             extensions = [ "rustfmt" "clippy" ];
           };
+          sbtPackage = pkgs.sbt.override { jre = pkgs.jdk25; };
         in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
+            packages = [
               rust
-              jdk25
-              maven
-              sbt
-              cmake
-              gcc
-              gnumake
-              pkg-config
-              git
-              nixpkgs-fmt
+              pkgs.jdk25
+              pkgs.maven
+              sbtPackage
+              pkgs.cmake
+              pkgs.gcc
+              pkgs.gnumake
+              pkgs.pkg-config
+              pkgs.git
+              pkgs.nixpkgs-fmt
             ];
 
             JAVA_HOME = "${pkgs.jdk25}";

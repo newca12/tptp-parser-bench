@@ -1,3 +1,10 @@
+/*
+ * Modified for this Java wrapper in 2026 from
+ * tptp/src/grammar/TPTP.g4 in newca12/playground-rs (commit
+ * 00428cd44348a3e05254e1834ea4a0ae3dba7a5f), licensed under GPL-3.0.
+ * See LICENSES/GPL-3.0.txt.
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
 grammar TPTP;
 
 WS : [ \r\t\n]+ -> skip ;

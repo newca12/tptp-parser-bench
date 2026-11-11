@@ -8,6 +8,7 @@
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use mrs_tptp::TPTPIterator as MrsTPTPIterator;
+use std::hint::black_box;
 use tptp::TPTPIterator;
 
 // ── Corpus files (embedded at compile time) ─────────────────────────────────
@@ -40,7 +41,7 @@ fn bench_tptp_nom(c: &mut Criterion) {
     for &(name, bytes) in CORPUS {
         group.throughput(Throughput::Bytes(bytes.len() as u64));
         group.bench_with_input(BenchmarkId::from_parameter(name), &bytes, |b, &data| {
-            b.iter(|| parse_with_tptp_nom(data));
+            b.iter(|| parse_with_tptp_nom(black_box(data)));
         });
     }
 
@@ -64,7 +65,7 @@ fn bench_mrs_tptp(c: &mut Criterion) {
         let content = std::str::from_utf8(bytes).expect("corpus file is not UTF-8");
         group.throughput(Throughput::Bytes(bytes.len() as u64));
         group.bench_with_input(BenchmarkId::from_parameter(name), &content, |b, &data| {
-            b.iter(|| parse_with_mrs_tptp(data));
+            b.iter(|| parse_with_mrs_tptp(black_box(data)));
         });
     }
 

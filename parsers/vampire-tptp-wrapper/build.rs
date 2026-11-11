@@ -13,8 +13,7 @@ fn main() {
         .build_target("vampire_lib")
         .build();
 
-    println!("cargo:rustc-link-search=native={}/lib", dst.display());
-    println!("cargo:rustc-link-lib=static=vampire_lib");
+    println!("cargo:rustc-link-search=native={}/build", dst.display());
 
     // Step 2: Compile the C++ bridge with matching flags
     cc::Build::new()
@@ -34,6 +33,10 @@ fn main() {
         .define("VZ3", "0")
         .define("NBUILD", "1")
         .compile("parse_bridge");
+
+    // Link Vampire after the bridge archive so its definitions can satisfy
+    // the bridge's unresolved references when using a one-pass static linker.
+    println!("cargo:rustc-link-lib=static=vampire_lib");
 
     // Step 3: Link C++ standard library
     let target = env::var("TARGET").unwrap();

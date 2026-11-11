@@ -72,8 +72,8 @@ impl ParserBackend for TptpAntlrBackend {
 
         match result {
             Ok((formula_count, include_count, elapsed_ms)) => ParseResult::Success {
-                formula_count,
-                include_count,
+                formula_count: Some(formula_count),
+                include_count: Some(include_count),
                 elapsed_ms,
             },
             Err(elapsed_ms) => ParseResult::Failed {

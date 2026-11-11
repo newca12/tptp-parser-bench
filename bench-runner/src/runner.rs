@@ -30,11 +30,20 @@ pub struct BenchResult {
 pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Settings) -> BenchResult {
     let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
     let file_size = std::fs::metadata(file_path).map(|m| m.len()).unwrap_or(0);
-    let file_content = std::fs::read(file_path).ok();
-
-    if matches!(parser.input_mode, InputMode::Stdin) && file_content.is_none() {
-        return make_error_result(parser, &file_name, file_size, "failed to read input file");
-    }
+    let file_content = match &parser.input_mode {
+        InputMode::Stdin => match std::fs::read(file_path) {
+            Ok(content) => Some(content),
+            Err(error) => {
+                return make_error_result(
+                    parser,
+                    &file_name,
+                    file_size,
+                    &format!("failed to read input file: {error}"),
+                );
+            }
+        },
+        InputMode::FileArg => None,
+    };
 
     // Check that the parser command exists before running iterations.
     if parser.run_cmd.is_empty() {
@@ -270,24 +279,53 @@ fn stats(times_ns: &[u128]) -> (f64, f64) {
 /// Check that a command exists (either an absolute/relative path or in PATH).
 fn which_or_exists(cmd: &str) -> Result<(), String> {
     let path = Path::new(cmd);
-    if path.is_absolute() || cmd.starts_with("./") || cmd.starts_with("../") {
-        if path.exists() {
+    if path.is_absolute() || cmd.contains('/') || cmd.contains('\\') {
+        if is_executable_file(path) {
             Ok(())
         } else {
             Err(format!("command not found: {}", cmd))
         }
     } else {
-        // Search PATH
-        match Command::new("which")
-            .arg(cmd)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-        {
-            Ok(status) if status.success() => Ok(()),
-            _ => Err(format!("command not found in PATH: {}", cmd)),
+        let path_var = std::env::var_os("PATH").unwrap_or_default();
+        for directory in std::env::split_paths(&path_var) {
+            if command_in_directory(&directory, cmd) {
+                return Ok(());
+            }
         }
+        Err(format!("command not found in PATH: {}", cmd))
     }
+}
+
+fn command_in_directory(directory: &Path, cmd: &str) -> bool {
+    let candidate = directory.join(cmd);
+    if is_executable_file(&candidate) {
+        return true;
+    }
+
+    #[cfg(windows)]
+    if candidate.extension().is_none() {
+        let extensions =
+            std::env::var_os("PATHEXT").unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
+        return extensions.to_string_lossy().split(';').any(|extension| {
+            is_executable_file(&candidate.with_extension(extension.trim_start_matches('.')))
+        });
+    }
+
+    false
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 fn make_error_result(
@@ -309,5 +347,32 @@ fn make_error_result(
         throughput_mb_s: 0.0,
         success: false,
         error: Some(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_executable_file, which_or_exists};
+
+    #[test]
+    fn resolves_the_current_executable_without_external_which() {
+        let current_exe = std::env::current_exe().expect("test executable path");
+        assert!(is_executable_file(&current_exe));
+        assert!(which_or_exists(current_exe.to_str().expect("UTF-8 executable path")).is_ok());
+    }
+
+    #[test]
+    fn resolves_commands_from_path() {
+        #[cfg(windows)]
+        let command = "cmd";
+        #[cfg(not(windows))]
+        let command = "sh";
+
+        assert!(which_or_exists(command).is_ok());
+    }
+
+    #[test]
+    fn reports_missing_commands() {
+        assert!(which_or_exists("tptp-parser-bench-command-that-does-not-exist").is_err());
     }
 }

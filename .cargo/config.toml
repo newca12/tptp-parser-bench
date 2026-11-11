@@ -1,4 +1,5 @@
 [build]
+target-dir = "target"
 # Vampire's generated C++ sources are memory-intensive. Keep Cargo's Rust
 # compilation modest; the Vampire wrapper independently limits CMake to one job.
 jobs = 2

@@ -13,7 +13,7 @@ impl VampireBackend {
         let path = PathBuf::from("./target/release/vampire-tptp-wrapper");
         if !path.exists() {
             return Err(format!(
-                "vampire-tptp-wrapper not found at {}. Build with: cargo build --release -p vampire-tptp-wrapper",
+                "vampire-tptp-wrapper not found at {}. Build with: cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml --target-dir target -j 1",
                 path.display()
             ));
         }
@@ -27,7 +27,7 @@ impl ParserBackend for VampireBackend {
     }
 
     fn verification_mode(&self) -> VerificationMode {
-        VerificationMode::CrossValidate
+        VerificationMode::ParseOnly
     }
 
     fn check_file(&self, file: &Path) -> ParseResult {

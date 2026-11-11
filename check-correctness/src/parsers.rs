@@ -14,8 +14,12 @@ use std::path::Path;
 pub enum VerificationMode {
     /// Parser produces pretty-printed output; roundtrip = parse -> pretty -> reparse -> pretty -> compare
     Roundtrip,
-    /// Parser only signals parse success/fail + formula count; cross-validate against mrs-tptp reference
+    /// Parser only signals parse success/fail + counts; cross-validate against mrs-tptp
+    /// for each count the parser reports.
     CrossValidate,
+    /// Parser validity can be checked, but its internal unit counts are not
+    /// comparable to the source-level formula counts from other parsers.
+    ParseOnly,
 }
 
 /// A parser backend that can check a single file for correctness.
@@ -30,21 +34,25 @@ pub trait ParserBackend: Send + Sync {
     fn check_file(&self, file: &Path) -> ParseResult;
 }
 
-/// Parse the standardized check output from subprocess wrappers: "OK formulas=N includes=M"
+/// Parse the standardized check output from subprocess wrappers:
+/// "OK formulas=N includes=M" (or `includes=unknown` if unavailable).
 pub fn parse_check_output(stdout: &str, elapsed_ms: f64) -> ParseResult {
     let line = stdout.trim();
     if line.starts_with("OK") {
-        let mut formula_count = None;
-        let mut include_count = None;
+        let mut formula_token = None;
+        let mut include_token = None;
         for part in line.split_whitespace() {
             if let Some(val) = part.strip_prefix("formulas=") {
-                formula_count = val.parse().ok();
+                formula_token = Some(val);
             }
             if let Some(val) = part.strip_prefix("includes=") {
-                include_count = val.parse().ok();
+                include_token = Some(val);
             }
         }
-        match (formula_count, include_count) {
+        match (
+            formula_token.and_then(parse_count_token),
+            include_token.and_then(parse_count_token),
+        ) {
             (Some(formula_count), Some(include_count)) => ParseResult::Success {
                 formula_count,
                 include_count,
@@ -70,7 +78,7 @@ pub fn parse_check_output(stdout: &str, elapsed_ms: f64) -> ParseResult {
             }
         }
         ParseResult::RoundtripFail {
-            formula_count,
+            formula_count: Some(formula_count),
             elapsed_ms,
             error,
         }
@@ -79,5 +87,55 @@ pub fn parse_check_output(stdout: &str, elapsed_ms: f64) -> ParseResult {
             elapsed_ms,
             error: format!("Unexpected output: {}", line),
         }
+    }
+}
+
+fn parse_count_token(token: &str) -> Option<Option<usize>> {
+    if token == "unknown" {
+        Some(None)
+    } else {
+        token.parse().ok().map(Some)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_check_output;
+    use crate::types::ParseResult;
+
+    #[test]
+    fn parses_known_include_count() {
+        assert!(matches!(
+            parse_check_output("OK formulas=12 includes=3", 1.0),
+            ParseResult::Success {
+                formula_count: Some(12),
+                include_count: Some(3),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn accepts_unknown_include_count() {
+        assert!(matches!(
+            parse_check_output("OK formulas=12 includes=unknown", 1.0),
+            ParseResult::Success {
+                formula_count: Some(12),
+                include_count: None,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn accepts_unknown_formula_and_include_counts() {
+        assert!(matches!(
+            parse_check_output("OK formulas=unknown includes=unknown", 1.0),
+            ParseResult::Success {
+                formula_count: None,
+                include_count: None,
+                ..
+            }
+        ));
     }
 }

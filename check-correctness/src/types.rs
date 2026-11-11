@@ -5,13 +5,13 @@ use std::path::PathBuf;
 pub enum ParseResult {
     /// Parse + verification succeeded
     Success {
-        formula_count: usize,
-        include_count: usize,
+        formula_count: Option<usize>,
+        include_count: Option<usize>,
         elapsed_ms: f64,
     },
     /// Parse succeeded but roundtrip (or cross-validation) failed
     RoundtripFail {
-        formula_count: usize,
+        formula_count: Option<usize>,
         elapsed_ms: f64,
         error: String,
     },
@@ -40,7 +40,9 @@ pub struct CheckSummary {
     pub timeouts: usize,
     pub roundtrip_failures: usize,
     pub total_formulas: usize,
+    pub files_with_known_formula_count: usize,
     pub total_includes: usize,
+    pub files_with_known_include_count: usize,
     pub total_parse_time_ms: f64,
     pub wall_time_secs: f64,
     pub failed_files: Vec<(PathBuf, String)>,

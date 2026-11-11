@@ -20,6 +20,13 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 
 ## Quick Start
 
+Clone the repository with its required optional-parser submodule:
+
+```bash
+git clone --recurse-submodules https://github.com/newca12/tptp-parser-bench.git
+cd tptp-parser-bench
+```
+
 ### With Nix
 
 On NixOS or any system with the Nix flake command enabled, enter the project
@@ -30,18 +37,30 @@ nix develop
 ```
 
 The shell provides Rust, JDK 25, Maven, sbt, and the native build tools used by
-the parser wrappers. Then use the build and run commands below. The Vampire
-wrapper remains optional and requires its git submodule.
+the parser wrappers. Vampire is enabled by default, so its source submodule
+must be initialized and its wrapper built before running the cross-parser
+benchmark:
+
+```bash
+git submodule update --init --recursive
+cargo build --release
+cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml --target-dir target -j 1
+(cd parsers/java-antlr-wrapper && mvn -q package)
+(cd parsers/scala-tptp-wrapper && sbt assembly)
+cargo run --release -p bench-runner
+```
 
 ### Without Nix
 
 ```bash
-# Clone with the Vampire source submodule (needed only for its optional wrapper)
-git clone --recurse-submodules https://github.com/newca12/tptp-parser-bench.git
-cd tptp-parser-bench
+# Ensure the Vampire source submodule is initialized (required by default).
+git submodule update --init --recursive
 
 # Build Rust workspace tools and Rust parser wrappers
 cargo build --release
+
+# Build the Vampire parser wrapper (resource-intensive; use one job)
+cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml --target-dir target -j 1
 
 # The JVM wrappers need JDK 11+ both to build and to run. Select JDK 25
 # before building them (adjust JAVA_HOME for your installation path).
@@ -76,7 +95,9 @@ tptp-parser-bench/
 │   ├── SYN000-1.p          # CNF syntax showcase
 │   ├── SYN000+1.p          # FOF syntax showcase
 │   ├── SYN000_1.p          # TFF syntax showcase
-│   └── SYN000=2.p          # TFA (arithmetic) syntax showcase
+│   ├── SYN000=2.p          # TFA (arithmetic) syntax showcase
+│   ├── Axioms/             # Include fixtures for SYN000-1.p and SYN000_1.p
+│   └── examples/           # Include fixture for SYN000+1.p
 ├── bench-native/           # Criterion micro-benchmarks
 │   └── benches/
 │       └── tptp_parsers.rs # Rust parser benchmarks
@@ -135,7 +156,7 @@ Drop `.p` or `.tptp` files into the `corpus/` directory. The bench-runner
 automatically discovers all files in that directory.
 
 For stress testing with large files, download problems from the
-[TPTP Problem Library](http://tptp.org).
+[TPTP Problem Library](https://tptp.org).
 
 ## Benchmark Modes
 
@@ -155,15 +176,15 @@ Measures wall-clock time including process startup overhead.
 Results: `results/report.html` (interactive Chart.js dashboard).
 The runner exits non-zero if any enabled parser/file combination fails.
 
-The Vampire C++ wrapper is optional because it compiles most of Vampire's
-large native codebase. It is disabled by default in `parsers.toml` and excluded
-from normal workspace builds to keep routine builds within a predictable
-resource budget. To opt in, initialize the submodule, build it with one job,
-then set `enabled = true` for `vampire-tptp`:
+The Vampire C++ wrapper is enabled by default in `parsers.toml`. Its source is
+included as a git submodule, and the wrapper is excluded from normal workspace
+builds because compiling Vampire's native parser is resource-intensive. The
+Quick Start initializes the submodule and builds the wrapper with one job. To
+skip it locally, set `enabled = false` for `vampire-tptp` in `parsers.toml`.
 
 ```bash
 git submodule update --init --recursive
-cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml -j 1
+cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml --target-dir target -j 1
 ```
 
 ### `check-correctness` (Manual)
@@ -183,9 +204,11 @@ cargo build --release -p check-correctness
 Available parsers: `mrs-tptp`, `tptp-nom`, `tptp-antlr`, `vampire-tptp`, `scala-tptp`, `java-antlr`.
 
 Parsers with pretty-printing support (mrs-tptp, tptp-nom, scala-tptp) use
-roundtrip verification: parse, pretty-print, reparse, compare. Parsers
-without pretty-printing (tptp-antlr, vampire-tptp, java-antlr) cross-validate
-formula and include counts against the mrs-tptp reference.
+roundtrip verification: parse, pretty-print, reparse, compare. The ANTLR
+parsers cross-validate formula and include counts against the mrs-tptp
+reference. Vampire's internal unit count is not comparable to source-level
+formula counts across TPTP dialects, so the checker reports parse success but
+does not cross-validate its formula or include counts.
 
 The subprocess-based parsers (vampire-tptp, scala-tptp, java-antlr) require
 their wrappers to be built first (see Quick Start).
@@ -214,12 +237,19 @@ timeout_secs = 30         # Per-invocation timeout
 
 On push to `main`, the CI workflow:
 
-1. Builds the Rust workspace and enabled parser wrappers (Vampire is opt-in)
+1. Builds the Rust workspace, Vampire wrapper, and enabled parser wrappers
 2. Runs Criterion and bench-runner benchmarks
 3. Publishes time-series charts via
    [github-action-benchmark](https://github.com/benchmark-action/github-action-benchmark)
 4. Deploys the HTML report to GitHub Pages
 
+For the first deployment, enable GitHub Pages in the repository settings and
+select **GitHub Actions** as the build and deployment source.
+
 ## License
 
-MIT
+The original benchmark harness is licensed under the MIT License; see
+[`LICENSE`](LICENSE). This repository also uses separately licensed parser
+components, including GPL-3.0 ANTLR parser sources and the optional BSD-3-Clause
+Vampire submodule. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) before
+redistributing components or their built executables.

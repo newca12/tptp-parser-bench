@@ -8,10 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
-  deployments: write
+  contents: read
 
 jobs:
   benchmark:
@@ -66,6 +63,9 @@ jobs:
       - name: Build workspace (release)
         run: cargo build --release
 
+      - name: Build Vampire parser wrapper
+        run: cargo build --release --manifest-path parsers/vampire-tptp-wrapper/Cargo.toml --target-dir target -j 1
+
       # ── Run Criterion benchmarks (Rust-native parsers) ─────────────────
       - name: Run Criterion benchmarks
         run: cargo bench -p bench-native 2>&1 | tee criterion-output.txt
@@ -78,9 +78,38 @@ jobs:
             --corpus corpus \
             --output results
 
-      # ── Publish to GitHub Pages ────────────────────────────────────────
+      # ── Upload HTML report as artifact ─────────────────────────────────
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: results/
+
+  # Keep write access away from the job that executes configurable parser commands.
+  publish-benchmarks:
+    name: Publish benchmark history
+    needs: benchmark
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download benchmark artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-report
+          path: results/
+
       - name: Store benchmark result (GitHub Action Benchmark)
-        if: github.ref == 'refs/heads/main'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: "TPTP Parser Arena"
@@ -92,20 +121,17 @@ jobs:
           comment-on-alert: true
           alert-threshold: "130%"
 
-      # ── Upload HTML report as artifact ─────────────────────────────────
-      - name: Upload report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-report
-          path: results/
-
   # ── Deploy HTML report to GitHub Pages ───────────────────────────────────
   deploy-report:
     name: Deploy report to Pages
-    needs: benchmark
+    needs: [benchmark, publish-benchmarks]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      deployments: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

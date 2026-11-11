@@ -75,7 +75,7 @@ impl ParserBackend for TptpNomBackend {
 
             if !parser2.remaining.is_empty() || reparsed.len() != 1 {
                 return ParseResult::RoundtripFail {
-                    formula_count,
+                    formula_count: Some(formula_count),
                     elapsed_ms,
                     error: format!("Failed to reparse '{}':\n  Original: {}", name, text),
                 };
@@ -86,7 +86,7 @@ impl ParserBackend for TptpNomBackend {
                     let reparsed_text = format!("{}", reparsed_item);
                     if *text != reparsed_text {
                         return ParseResult::RoundtripFail {
-                            formula_count,
+                            formula_count: Some(formula_count),
                             elapsed_ms,
                             error: format!(
                                 "Round-trip mismatch for '{}':\n  Original:  {}\n  Reparsed:  {}",
@@ -97,7 +97,7 @@ impl ParserBackend for TptpNomBackend {
                 }
                 Err(_) => {
                     return ParseResult::RoundtripFail {
-                        formula_count,
+                        formula_count: Some(formula_count),
                         elapsed_ms,
                         error: format!("Failed to reparse '{}':\n  Original: {}", name, text),
                     };
@@ -106,8 +106,8 @@ impl ParserBackend for TptpNomBackend {
         }
 
         ParseResult::Success {
-            formula_count,
-            include_count,
+            formula_count: Some(formula_count),
+            include_count: Some(include_count),
             elapsed_ms,
         }
     }

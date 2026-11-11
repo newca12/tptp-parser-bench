@@ -45,7 +45,7 @@ impl ParserBackend for MrsTptpBackend {
                                 || !reparsed_problem.includes.is_empty()
                             {
                                 return ParseResult::RoundtripFail {
-                                    formula_count,
+                                    formula_count: Some(formula_count),
                                     elapsed_ms,
                                     error: format!(
                                         "Reparsing '{}' yielded {} formulas and {} includes; expected exactly one formula",
@@ -58,7 +58,7 @@ impl ParserBackend for MrsTptpBackend {
                             let reparsed_pretty = reparsed_problem.formulas[0].to_string();
                             if pretty != reparsed_pretty {
                                 return ParseResult::RoundtripFail {
-                                    formula_count,
+                                    formula_count: Some(formula_count),
                                     elapsed_ms,
                                     error: format!(
                                         "Round-trip mismatch for '{}':\n  Original:  {}\n  Reparsed:  {}",
@@ -69,7 +69,7 @@ impl ParserBackend for MrsTptpBackend {
                         }
                         Err(e) => {
                             return ParseResult::RoundtripFail {
-                                formula_count,
+                                formula_count: Some(formula_count),
                                 elapsed_ms,
                                 error: format!(
                                     "Failed to reparse '{}': {}\n  Pretty: {}",
@@ -81,8 +81,8 @@ impl ParserBackend for MrsTptpBackend {
                 }
 
                 ParseResult::Success {
-                    formula_count,
-                    include_count,
+                    formula_count: Some(formula_count),
+                    include_count: Some(include_count),
                     elapsed_ms,
                 }
             }

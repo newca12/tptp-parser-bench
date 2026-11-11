@@ -39,7 +39,7 @@ name = "mrs-tptp"
 display_name = "mrs-tptp (winnow)"
 language = "Rust"
 technique = "winnow parser combinators"
-repository = "https://github.com/newca12/mrs-tptp-parser"
+repository = "https://github.com/newca12/mrs"
 run_cmd = ["./target/release/mrs-tptp-wrapper"]
 input_mode = "file_arg"
 enabled = true
@@ -54,7 +54,7 @@ technique = "hand-written recursive descent"
 repository = "https://github.com/vprover/vampire"
 run_cmd = ["./target/release/vampire-tptp-wrapper"]
 input_mode = "file_arg"
-enabled = false # Optional native build; see README.md
+enabled = true
 
 # ─── Scala Parsers ──────────────────────────────────────────────────────────
 

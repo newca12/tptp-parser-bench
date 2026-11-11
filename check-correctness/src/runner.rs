@@ -92,10 +92,10 @@ fn run_inner(
 
 pub fn check_one(backend: &dyn ParserBackend, file: &Path) -> ParseResult {
     let result = backend.check_file(file);
-    if backend.verification_mode() == crate::parsers::VerificationMode::CrossValidate {
-        cross_validate(result, file)
-    } else {
-        result
+    match backend.verification_mode() {
+        crate::parsers::VerificationMode::CrossValidate => cross_validate(result, file),
+        crate::parsers::VerificationMode::Roundtrip
+        | crate::parsers::VerificationMode::ParseOnly => result,
     }
 }
 
@@ -254,22 +254,24 @@ fn cross_validate(result: ParseResult, file: &Path) -> ParseResult {
             elapsed_ms,
         } => match reference::parse_file(file) {
             Ok((ref_formulas, ref_includes)) => {
-                if *formula_count != ref_formulas {
+                if formula_count.is_some_and(|count| count != ref_formulas) {
                     ParseResult::RoundtripFail {
                         formula_count: *formula_count,
                         elapsed_ms: *elapsed_ms,
                         error: format!(
                             "Formula count mismatch: parser={}, mrs-tptp reference={}",
-                            formula_count, ref_formulas
+                            formula_count.unwrap(),
+                            ref_formulas
                         ),
                     }
-                } else if *include_count != ref_includes {
+                } else if include_count.is_some_and(|count| count != ref_includes) {
                     ParseResult::RoundtripFail {
                         formula_count: *formula_count,
                         elapsed_ms: *elapsed_ms,
                         error: format!(
                             "Include count mismatch: parser={}, mrs-tptp reference={}",
-                            include_count, ref_includes
+                            include_count.unwrap(),
+                            ref_includes
                         ),
                     }
                 } else {
@@ -301,8 +303,14 @@ fn aggregate(results: &[FileResult], total_files: usize, wall_time_secs: f64) ->
                 elapsed_ms,
             } => {
                 summary.successful += 1;
-                summary.total_formulas += formula_count;
-                summary.total_includes += include_count;
+                if let Some(formula_count) = formula_count {
+                    summary.total_formulas += formula_count;
+                    summary.files_with_known_formula_count += 1;
+                }
+                if let Some(include_count) = include_count {
+                    summary.total_includes += include_count;
+                    summary.files_with_known_include_count += 1;
+                }
                 summary.total_parse_time_ms += elapsed_ms;
             }
             ParseResult::RoundtripFail {
@@ -311,7 +319,10 @@ fn aggregate(results: &[FileResult], total_files: usize, wall_time_secs: f64) ->
                 error,
             } => {
                 summary.roundtrip_failures += 1;
-                summary.total_formulas += formula_count;
+                if let Some(formula_count) = formula_count {
+                    summary.total_formulas += formula_count;
+                    summary.files_with_known_formula_count += 1;
+                }
                 summary.total_parse_time_ms += elapsed_ms;
                 summary.roundtrip_failed_files.push((
                     fr.path.clone(),

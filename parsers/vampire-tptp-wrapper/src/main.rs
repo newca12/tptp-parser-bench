@@ -7,18 +7,15 @@
 //! TPTP parser (Parse::TPTP). Exits 0 on success, 1 on parse error.
 //! Produces no output on success (designed for timing).
 //!
-//! In --check mode, outputs "OK formulas=N includes=0" to stdout on success.
+//! In --check mode, reports unknown counts: Vampire's internal unit count is
+//! not comparable to source-level formula counts across TPTP dialects.
 
 use std::env;
 use std::ffi::CString;
 use std::process;
 
-extern "C" {
+unsafe extern "C" {
     fn parse_tptp_file(path: *const std::os::raw::c_char) -> std::os::raw::c_int;
-    fn parse_tptp_file_counted(
-        path: *const std::os::raw::c_char,
-        formula_count: *mut std::os::raw::c_int,
-    ) -> std::os::raw::c_int;
 }
 
 fn main() {
@@ -71,12 +68,11 @@ fn check_mode(path: &str) {
         }
     };
 
-    let mut formula_count: std::os::raw::c_int = 0;
-    let result = unsafe { parse_tptp_file_counted(c_path.as_ptr(), &mut formula_count) };
+    let result = unsafe { parse_tptp_file(c_path.as_ptr()) };
 
     match result {
         0 => {
-            println!("OK formulas={} includes=0", formula_count);
+            println!("OK formulas=unknown includes=unknown");
         }
         1 => {
             eprintln!("parse error in {}", path);

@@ -29,7 +29,9 @@ pub fn print_progress(current: usize, total: usize, relative_path: &str, result:
             elapsed_ms,
         } => format!(
             "OK ({:.2}ms, {} formulas, {} includes)",
-            elapsed_ms, formula_count, include_count
+            elapsed_ms,
+            formula_count.map_or_else(|| "unknown".to_string(), |count| count.to_string()),
+            include_count.map_or_else(|| "unknown".to_string(), |count| count.to_string())
         ),
         ParseResult::RoundtripFail {
             formula_count,
@@ -37,7 +39,8 @@ pub fn print_progress(current: usize, total: usize, relative_path: &str, result:
             ..
         } => format!(
             "ROUNDTRIP FAIL ({:.2}ms, {} formulas)",
-            elapsed_ms, formula_count
+            elapsed_ms,
+            formula_count.map_or_else(|| "unknown".to_string(), |count| count.to_string())
         ),
         ParseResult::Failed { elapsed_ms, error } => {
             format!("FAILED ({:.2}ms)\n        Error: {}", elapsed_ms, error)
@@ -89,8 +92,24 @@ pub fn print_summary(summary: &CheckSummary, verbose: bool) {
         }
     );
     println!();
-    println!("Total formulas:   {}", summary.total_formulas);
-    println!("Total includes:   {}", summary.total_includes);
+    if summary.files_with_known_formula_count == 0 {
+        println!("Total formulas:   unknown");
+    } else {
+        println!(
+            "Total formulas:   {} (known for {} of {} parsed files)",
+            summary.total_formulas,
+            summary.files_with_known_formula_count,
+            summary.successful + summary.roundtrip_failures
+        );
+    }
+    if summary.files_with_known_include_count == 0 {
+        println!("Total includes:   unknown");
+    } else {
+        println!(
+            "Total includes:   {} (known for {} of {} successful files)",
+            summary.total_includes, summary.files_with_known_include_count, summary.successful
+        );
+    }
     println!("Roundtrip fails:  {}", summary.roundtrip_failures);
     println!();
     println!("Wall time:        {:.2}s", summary.wall_time_secs);
