@@ -6,10 +6,11 @@ fn main() {
     let vampire_path = manifest_dir.join("vampire");
 
     // Build the parser-only static library assembled by our wrapper CMake file.
+    let jobs = env::var("VAMPIRE_BUILD_JOBS").unwrap_or_else(|_| "4".to_string());
     let dst = cmake::Config::new(&manifest_dir)
         .define("CMAKE_BUILD_TYPE", "Release")
-        .define("CMAKE_BUILD_PARALLEL_LEVEL", "1")
-        .env("VAMPIRE_BUILD_JOBS", "1")
+        .define("CMAKE_BUILD_PARALLEL_LEVEL", &jobs)
+        .env("VAMPIRE_BUILD_JOBS", &jobs)
         .build_target("vampire_lib")
         .build();
 
