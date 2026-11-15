@@ -39,18 +39,23 @@ pub fn generate_github_action_json(results: &[BenchResult]) -> String {
             } else {
                 r.mean_ns
             };
+            let mem_str = r
+                .peak_memory_bytes
+                .map(|b| format!(", peak mem: {}", format_bytes(b)))
+                .unwrap_or_default();
             Entry {
                 name: format!("{} / {}", r.display_name, r.file_name),
                 unit: "ns".to_string(),
                 value: primary_val,
                 range: format!("± {:.0}", r.stddev_ns),
                 extra: format!(
-                    "{} bytes, {:.2} MB/s, median: {}, mean: {} ± {}, {} ({})",
+                    "{} bytes, {:.2} MB/s, median: {}, mean: {} ± {}{}, {} ({})",
                     r.file_size_bytes,
                     r.throughput_mb_s,
                     format_time_ns(r.median_ns),
                     format_time_ns(r.mean_ns),
                     format_time_ns(r.stddev_ns),
+                    mem_str,
                     r.language,
                     r.technique
                 ),
@@ -70,6 +75,18 @@ fn format_time_ns(ns: f64) -> String {
         format!("{:.2} µs", ns / 1e3)
     } else {
         format!("{:.0} ns", ns)
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    } else if bytes >= 1024 * 1024 {
+        format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        format!("{:.2} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
     }
 }
 
@@ -280,6 +297,14 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
     </div>
   </div>
 
+  <!-- Peak Memory Chart -->
+  <h2>Peak Memory Comparison</h2>
+  <div class="card">
+    <div class="chart-container">
+      <canvas id="memoryChart"></canvas>
+    </div>
+  </div>
+
   <!-- Throughput Chart -->
   <h2>Throughput</h2>
   <div class="card">
@@ -300,6 +325,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
           <th>Mean</th>
           <th>Std Dev</th>
           <th>Min / Max</th>
+          <th>Peak Memory</th>
           <th>Throughput</th>
           <th>Status</th>
         </tr>
@@ -355,6 +381,14 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       return (mb_s * 1000).toFixed(2) + ' KB/s';
     }}
 
+    function formatBytes(bytes) {{
+      if (!bytes || bytes <= 0) return '—';
+      if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return bytes + ' B';
+    }}
+
     function primaryTime(r) {{
       return r && r.median_ns > 0 ? r.median_ns : (r ? r.mean_ns : 0);
     }}
@@ -367,7 +401,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
     }}
 
     // ── Charts ───────────────────────────────────────────────────────────
-    let timeChart, throughputChart;
+    let timeChart, memoryChart, throughputChart;
 
     function buildTimeChart() {{
       const ctx = document.getElementById('timeChart').getContext('2d');
@@ -401,6 +435,39 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
               type: 'logarithmic',
               title: {{ display: true, text: 'Parse time (log scale)', color: '#636c76' }},
               ticks: {{ color: '#636c76', callback: (v) => formatNs(v) }},
+              grid: {{ color: '#e8e8e8' }}
+            }},
+            y: {{
+              ticks: {{ color: '#1f2328' }},
+              grid: {{ display: false }}
+            }}
+          }}
+        }}
+      }});
+    }}
+
+    function buildMemoryChart() {{
+      const ctx = document.getElementById('memoryChart').getContext('2d');
+      memoryChart = new Chart(ctx, {{
+        type: 'bar',
+        data: {{ labels: [], datasets: [] }},
+        options: {{
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {{
+            legend: {{ display: false }},
+            tooltip: {{
+              callbacks: {{
+                label: (c) => c.dataset.label + ': ' + formatBytes(c.raw)
+              }}
+            }}
+          }},
+          scales: {{
+            x: {{
+              type: 'linear',
+              title: {{ display: true, text: 'Peak Memory', color: '#636c76' }},
+              ticks: {{ color: '#636c76', callback: (v) => formatBytes(v) }},
               grid: {{ color: '#e8e8e8' }}
             }},
             y: {{
@@ -481,6 +548,16 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       timeChart.options.scales.x.type = useLog ? 'logarithmic' : 'linear';
       timeChart.options.scales.x.title.text = useLog ? 'Parse time (log scale)' : 'Parse time';
       timeChart.update();
+
+      // Update memoryChart
+      memoryChart.data.labels = filtered.map(r => r.display_name);
+      memoryChart.data.datasets = [{{
+        label: 'Peak memory',
+        data: filtered.map(r => r.peak_memory_bytes || 0),
+        backgroundColor: filtered.map((r, i) => colorFor(i)),
+        borderRadius: 4,
+      }}];
+      memoryChart.update();
     }}
 
     // ── Detail table ─────────────────────────────────────────────────────
@@ -495,13 +572,14 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
         const ranked = [...successful, ...failed];
         const bestName = successful.length > 0 ? successful[0].display_name : null;
 
-        html += `<tr class="file-header"><td colspan="8">${{escapeHtml(file)}}</td></tr>`;
+        html += `<tr class="file-header"><td colspan="9">${{escapeHtml(file)}}</td></tr>`;
 
         ranked.forEach((r, idx) => {{
           const isBest = r.success && r.display_name === bestName;
           const rank = r.success ? idx + 1 : 0;
           const medal = rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : rank || '—';
           const minMax = r.success ? (formatNs(r.min_ns) + ' / ' + formatNs(r.max_ns)) : '—';
+          const peakMem = r.success && r.peak_memory_bytes ? formatBytes(r.peak_memory_bytes) : '—';
           html += `
             <tr class="${{isBest ? 'best-row' : ''}}">
               <td>${{medal}}</td>
@@ -510,6 +588,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
               <td>${{r.success ? formatNs(r.mean_ns) : '—'}}</td>
               <td>${{r.success ? PM + ' ' + formatNs(r.stddev_ns) : '—'}}</td>
               <td>${{minMax}}</td>
+              <td>${{peakMem}}</td>
               <td>${{r.success ? formatThroughput(r.throughput_mb_s) : '—'}}</td>
               <td class="${{r.success ? 'success' : 'failure'}}">${{r.success ? CHECK : CROSS + ' ' + escapeHtml(r.error || '')}}</td>
             </tr>`;
@@ -521,6 +600,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
 
     // ── Init ─────────────────────────────────────────────────────────────
     buildTimeChart();
+    buildMemoryChart();
     buildThroughputChart();
     updateCharts();
     populateDetailTable();

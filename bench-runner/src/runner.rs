@@ -24,6 +24,8 @@ pub struct BenchResult {
     pub min_ns: u128,
     pub max_ns: u128,
     pub throughput_mb_s: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_memory_bytes: Option<u64>,
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -57,8 +59,9 @@ pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Setting
     }
 
     // Try high-accuracy in-process benchmark mode if supported by the wrapper.
-    let times_ns = match try_run_in_process_bench(parser, file_path, settings) {
-        Some(Ok(times)) => times,
+    let (times_ns, peak_memory_bytes) = match try_run_in_process_bench(parser, file_path, settings)
+    {
+        Some(Ok((times, mem))) => (times, mem),
         Some(Err(e)) => {
             return make_error_result(parser, &file_name, file_size, &e.to_string());
         }
@@ -95,7 +98,7 @@ pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Setting
                     }
                 }
             }
-            times
+            (times, None)
         }
     };
 
@@ -125,6 +128,7 @@ pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Setting
         min_ns: st.min_ns,
         max_ns: st.max_ns,
         throughput_mb_s,
+        peak_memory_bytes,
         success: true,
         error: None,
     }
@@ -333,14 +337,14 @@ fn stats(times_ns: &[u128]) -> Stats {
 /// Attempt to run in-process benchmarking via `--bench <warmup> <iters> <file>`.
 ///
 /// Returns:
-/// - `Some(Ok(times))` if the wrapper supports `--bench` and successfully returned timings.
+/// - `Some(Ok((times, peak_memory_bytes)))` if the wrapper supports `--bench` and successfully returned timings.
 /// - `Some(Err(e))` if the wrapper attempted `--bench` but failed with a parse or runtime error.
 /// - `None` if the wrapper does not support `--bench` or input mode is stdin (signals fallback).
 fn try_run_in_process_bench(
     parser: &ParserConfig,
     file_path: &Path,
     settings: &Settings,
-) -> Option<crate::Result<Vec<u128>>> {
+) -> Option<crate::Result<(Vec<u128>, Option<u64>)>> {
     if let InputMode::Stdin = parser.input_mode {
         return None;
     }
@@ -436,12 +440,16 @@ fn try_run_in_process_bench(
         return None;
     }
 
+    let mut times_res = None;
+    let mut peak_mem = None;
+
     for line in stdout_str.lines() {
-        if let Some(rest) = line.trim().strip_prefix("BENCH_RESULTS_NS:") {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("BENCH_RESULTS_NS:") {
             let json_str = rest.trim();
             match serde_json::from_str::<Vec<u128>>(json_str) {
                 Ok(times) if !times.is_empty() => {
-                    return Some(Ok(times));
+                    times_res = Some(times);
                 }
                 Ok(_) => {
                     return Some(Err(io::Error::other("empty timings returned").into()));
@@ -453,10 +461,18 @@ fn try_run_in_process_bench(
                     .into()));
                 }
             }
+        } else if let Some(rest) = trimmed.strip_prefix("PEAK_MEMORY_BYTES:") {
+            if let Ok(bytes) = rest.trim().parse::<u64>() {
+                peak_mem = Some(bytes);
+            }
         }
     }
 
-    None
+    if let Some(times) = times_res {
+        Some(Ok((times, peak_mem)))
+    } else {
+        None
+    }
 }
 
 /// Check that a command exists (either an absolute/relative path or in PATH).
@@ -531,6 +547,7 @@ fn make_error_result(
         min_ns: 0,
         max_ns: 0,
         throughput_mb_s: 0.0,
+        peak_memory_bytes: None,
         success: false,
         error: Some(error.to_string()),
     }

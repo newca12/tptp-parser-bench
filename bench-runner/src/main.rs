@@ -87,13 +87,18 @@ fn main() -> Result<()> {
             let result = runner::run_benchmark(parser, file, &config.settings);
 
             if result.success {
+                let mem_str = result
+                    .peak_memory_bytes
+                    .map(|b| format!(", peak mem: {}", format_bytes(b)))
+                    .unwrap_or_default();
                 println!(
-                    "  ✓ {} : {} (median), {} ± {} ({})",
+                    "  ✓ {} : {} (median), {} ± {} ({}{})",
                     result.file_name,
                     format_time_ns(result.median_ns),
                     format_time_ns(result.mean_ns),
                     format_time_ns(result.stddev_ns),
                     format_throughput(result.throughput_mb_s),
+                    mem_str,
                 );
             } else {
                 println!(
@@ -161,5 +166,18 @@ fn format_time_ns(ns: f64) -> String {
         format!("{:.2} µs", ns / 1e3)
     } else {
         format!("{:.0} ns", ns)
+    }
+}
+
+/// Format bytes with adaptive binary units (B, KB, MB, GB).
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    } else if bytes >= 1024 * 1024 {
+        format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        format!("{:.2} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
     }
 }

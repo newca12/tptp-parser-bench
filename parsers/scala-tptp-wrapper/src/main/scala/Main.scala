@@ -101,6 +101,34 @@ object Main {
     }
 
     println(s"BENCH_RESULTS_NS: [${times.mkString(",")}]")
+    getPeakMemoryBytes().foreach(b => println(s"PEAK_MEMORY_BYTES: $b"))
+  }
+
+  def getPeakMemoryBytes(): Option[Long] = {
+    try {
+      val statusPath = java.nio.file.Paths.get("/proc/self/status")
+      if (java.nio.file.Files.exists(statusPath)) {
+        val content = java.nio.file.Files.readString(statusPath)
+        var hwm: Option[Long] = None
+        var peak: Option[Long] = None
+        for (line <- content.linesIterator) {
+          if (line.startsWith("VmHWM:")) {
+            val parts = line.split("\\s+")
+            if (parts.length >= 2) {
+              hwm = parts(1).toLongOption.map(_ * 1024L)
+            }
+          } else if (line.startsWith("VmPeak:")) {
+            val parts = line.split("\\s+")
+            if (parts.length >= 2) {
+              peak = parts(1).toLongOption.map(_ * 1024L)
+            }
+          }
+        }
+        hwm.orElse(peak)
+      } else None
+    } catch {
+      case _: Exception => None
+    }
   }
 
   def checkFile(path: String): Unit = {
