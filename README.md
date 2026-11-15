@@ -13,10 +13,16 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 |--------|----------|-----------|------------|
 | **tptp** (nom) | Rust | nom (zero-copy, streaming) | [MichaelRawson/tptp](https://github.com/MichaelRawson/tptp) |
 | **mrs-tptp** (winnow, zero-copy) | Rust | winnow parser combinators | [newca12/mrs](https://github.com/newca12/mrs) |
-| **tptp** (ANTLR4, Rust) | Rust | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
+| **tptp** (ANTLR4, Rust; experimental) | Rust | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
 | **Vampire TPTP** (hand-written) | C++ | hand-written recursive descent | [vprover/vampire](https://github.com/vprover/vampire) |
 | **tptp** (ANTLR4, Java) | Java | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
 | **scala-tptp-parser** (combinators) | Scala | Scala parser combinators | [leoprover/scala-tptp-parser](https://github.com/leoprover/scala-tptp-parser) |
+
+The Rust ANTLR4 wrapper is marked experimental and disabled by default: its
+upstream generated parser currently reports syntax errors on some showcase
+inputs while recovering a parse tree. The wrapper and correctness checker now
+surface those errors instead of counting the recovered tree as a successful
+parse. Re-enable it in `parsers.toml` to investigate upstream changes.
 
 ## Quick Start
 
@@ -178,12 +184,18 @@ deviation, min, max, and throughput.
 
 Results: `results/report.html` (interactive Chart.js dashboard).
 The runner exits non-zero if any enabled parser/file combination fails.
+For wrappers that emit it, peak memory is the process high-water resident set
+size (`VmHWM`) when available on Linux. It covers the complete in-process
+benchmark run, including runtime startup and warmups, and is omitted on
+platforms without that metric.
 
 The Vampire C++ wrapper is enabled by default in `parsers.toml`. Its source is
 included as a git submodule, and the wrapper is excluded from normal workspace
 builds because compiling Vampire's native parser is resource-intensive. The
 Quick Start initializes the submodule and builds the wrapper with one job. To
 skip it locally, set `enabled = false` for `vampire-tptp` in `parsers.toml`.
+The CMake build defaults to one job; override this explicitly with
+`VAMPIRE_BUILD_JOBS=<n>` if your machine has sufficient memory.
 
 ```bash
 git submodule update --init --recursive

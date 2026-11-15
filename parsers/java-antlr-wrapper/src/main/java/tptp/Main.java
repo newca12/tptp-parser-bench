@@ -123,23 +123,14 @@ public class Main {
             java.nio.file.Path statusPath = java.nio.file.Paths.get("/proc/self/status");
             if (java.nio.file.Files.exists(statusPath)) {
                 String content = java.nio.file.Files.readString(statusPath);
-                Long hwm = null;
-                Long peak = null;
                 for (String line : content.split("\n")) {
                     if (line.startsWith("VmHWM:")) {
                         String[] parts = line.split("\\s+");
                         if (parts.length >= 2) {
-                            hwm = Long.parseLong(parts[1]) * 1024L;
-                        }
-                    } else if (line.startsWith("VmPeak:")) {
-                        String[] parts = line.split("\\s+");
-                        if (parts.length >= 2) {
-                            peak = Long.parseLong(parts[1]) * 1024L;
+                            return Long.parseLong(parts[1]) * 1024L;
                         }
                     }
                 }
-                if (hwm != null) return hwm;
-                if (peak != null) return peak;
             }
         } catch (Exception ignored) {
         }

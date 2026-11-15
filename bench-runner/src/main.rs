@@ -53,9 +53,10 @@ fn main() -> Result<()> {
     for entry in std::fs::read_dir(&cli.corpus)? {
         let entry = entry?;
         let path = entry.path();
-        if path
-            .extension()
-            .map_or(false, |ext| ext == "p" || ext == "tptp")
+        if path.is_file()
+            && path
+                .extension()
+                .is_some_and(|ext| ext == "p" || ext == "tptp")
         {
             corpus_files.push(path);
         }

@@ -113,7 +113,7 @@ pub fn print_summary(summary: &CheckSummary, verbose: bool) {
     println!("Roundtrip fails:  {}", summary.roundtrip_failures);
     println!();
     println!("Wall time:        {:.2}s", summary.wall_time_secs);
-    println!("CPU time (sum):   {:.2}ms", summary.total_parse_time_ms);
+    println!("Measured time (sum): {:.2}ms", summary.total_parse_time_ms);
 
     if summary.total_files > 0 {
         println!(

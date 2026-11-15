@@ -99,22 +99,12 @@ fn bench_mode(warmup: usize, iters: usize, path: &str) {
 
 fn peak_memory_bytes() -> Option<u64> {
     let content = fs::read_to_string("/proc/self/status").ok()?;
-    let mut hwm = None;
-    let mut peak = None;
-    for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("VmHWM:") {
-            if let Some(val) = rest.split_whitespace().next() {
-                if let Ok(kb) = val.parse::<u64>() {
-                    hwm = Some(kb * 1024);
-                }
-            }
-        } else if let Some(rest) = line.strip_prefix("VmPeak:") {
-            if let Some(val) = rest.split_whitespace().next() {
-                if let Ok(kb) = val.parse::<u64>() {
-                    peak = Some(kb * 1024);
-                }
-            }
-        }
-    }
-    hwm.or(peak)
+    let line = content.lines().find(|line| line.starts_with("VmHWM:"))?;
+    let kilobytes = line
+        .strip_prefix("VmHWM:")?
+        .split_whitespace()
+        .next()?
+        .parse::<u64>()
+        .ok()?;
+    kilobytes.checked_mul(1024)
 }

@@ -68,7 +68,9 @@ pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Setting
         None => {
             // Fallback: run external process loop
             let mut times = Vec::with_capacity(settings.iterations);
-            let total_iters = settings.warmup_iterations + settings.iterations;
+            let total_iters = settings
+                .warmup_iterations
+                .saturating_add(settings.iterations);
 
             for i in 0..total_iters {
                 let is_warmup = i < settings.warmup_iterations;
@@ -166,6 +168,7 @@ fn run_once(
         cmd.process_group(0);
     }
 
+    let timeout = Duration::from_secs(timeout_secs);
     let start = Instant::now();
     let mut child = cmd
         .spawn()
@@ -199,26 +202,16 @@ fn run_once(
         None
     };
 
-    let status = match child.wait_timeout(Duration::from_secs(timeout_secs)) {
+    let status = match child.wait_timeout(timeout.saturating_sub(start.elapsed())) {
         Err(error) => {
-            #[cfg(unix)]
-            unsafe {
-                libc::kill(-(child.id() as i32), libc::SIGKILL);
-            }
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_child_and_group(&mut child);
             return Err(
                 io::Error::other(format!("failed waiting for parser process: {error}")).into(),
             );
         }
         Ok(Some(status)) => status,
         Ok(None) => {
-            #[cfg(unix)]
-            unsafe {
-                libc::kill(-(child.id() as i32), libc::SIGKILL);
-            }
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_child_and_group(&mut child);
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!("timeout after {}s", timeout_secs),
@@ -232,11 +225,7 @@ fn run_once(
         match writer.recv_timeout(remaining) {
             Ok(result) => result?,
             Err(_) => {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(-(child.id() as i32), libc::SIGKILL);
-                }
-                let _ = child.kill();
+                terminate_child_and_group(&mut child);
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     format!("timeout after {}s", timeout_secs),
@@ -251,11 +240,7 @@ fn run_once(
         match reader.recv_timeout(remaining) {
             Ok(stderr) => stderr,
             Err(_) => {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(-(child.id() as i32), libc::SIGKILL);
-                }
-                let _ = child.kill();
+                terminate_child_and_group(&mut child);
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     format!("timeout after {}s", timeout_secs),
@@ -284,6 +269,15 @@ fn run_once(
     }
 
     Ok(elapsed)
+}
+
+fn terminate_child_and_group(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// Statistical summary of nanosecond timings.
@@ -367,6 +361,8 @@ fn try_run_in_process_bench(
         cmd.process_group(0);
     }
 
+    let batch_timeout = batch_timeout(settings);
+    let start = Instant::now();
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(_) => return None,
@@ -392,16 +388,10 @@ fn try_run_in_process_bench(
         receiver
     });
 
-    let batch_timeout = Duration::from_secs(settings.timeout_secs.max(60));
-    let status = match child.wait_timeout(batch_timeout) {
+    let status = match child.wait_timeout(batch_timeout.saturating_sub(start.elapsed())) {
         Ok(Some(status)) => status,
         Ok(None) => {
-            #[cfg(unix)]
-            unsafe {
-                libc::kill(-(child.id() as i32), libc::SIGKILL);
-            }
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_child_and_group(&mut child);
             return Some(Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
@@ -412,18 +402,25 @@ fn try_run_in_process_bench(
             .into()));
         }
         Err(e) => {
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_child_and_group(&mut child);
             return Some(Err(e.into()));
         }
     };
 
-    let stdout_bytes = stdout_reader
-        .and_then(|r| r.recv().ok())
-        .unwrap_or_default();
-    let stderr_bytes = stderr_reader
-        .and_then(|r| r.recv().ok())
-        .unwrap_or_default();
+    let stdout_bytes = match receive_process_output(stdout_reader, start, batch_timeout, "stdout") {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            terminate_child_and_group(&mut child);
+            return Some(Err(error.into()));
+        }
+    };
+    let stderr_bytes = match receive_process_output(stderr_reader, start, batch_timeout, "stderr") {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            terminate_child_and_group(&mut child);
+            return Some(Err(error.into()));
+        }
+    };
 
     let stdout_str = String::from_utf8_lossy(&stdout_bytes);
     let stderr_str = String::from_utf8_lossy(&stderr_bytes);
@@ -440,39 +437,85 @@ fn try_run_in_process_bench(
         return None;
     }
 
-    let mut times_res = None;
-    let mut peak_mem = None;
+    parse_bench_output(&stdout_str, settings.iterations)
+}
 
-    for line in stdout_str.lines() {
+fn batch_timeout(settings: &Settings) -> Duration {
+    // In-process mode performs every warmup and timed parse in one child. Give
+    // each parse its configured timeout budget, with a 60-second minimum for
+    // process startup and output collection.
+    let iterations = settings
+        .warmup_iterations
+        .saturating_add(settings.iterations);
+    let iterations = u64::try_from(iterations).unwrap_or(u64::MAX);
+    Duration::from_secs(settings.timeout_secs.saturating_mul(iterations).max(60))
+}
+
+fn receive_process_output(
+    receiver: Option<mpsc::Receiver<Vec<u8>>>,
+    start: Instant,
+    timeout: Duration,
+    stream: &str,
+) -> io::Result<Vec<u8>> {
+    let Some(receiver) = receiver else {
+        return Ok(Vec::new());
+    };
+
+    receiver
+        .recv_timeout(timeout.saturating_sub(start.elapsed()))
+        .map_err(|error| match error {
+            mpsc::RecvTimeoutError::Timeout => io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("timed out while reading parser {stream}"),
+            ),
+            mpsc::RecvTimeoutError::Disconnected => {
+                io::Error::other(format!("failed to read parser {stream}"))
+            }
+        })
+}
+
+fn parse_bench_output(
+    stdout: &str,
+    expected_iterations: usize,
+) -> Option<crate::Result<(Vec<u128>, Option<u64>)>> {
+    let mut times = None;
+    let mut peak_memory = None;
+
+    for line in stdout.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("BENCH_RESULTS_NS:") {
-            let json_str = rest.trim();
-            match serde_json::from_str::<Vec<u128>>(json_str) {
-                Ok(times) if !times.is_empty() => {
-                    times_res = Some(times);
-                }
-                Ok(_) => {
-                    return Some(Err(io::Error::other("empty timings returned").into()));
-                }
-                Err(e) => {
+            if times.is_some() {
+                return Some(Err(io::Error::other(
+                    "multiple BENCH_RESULTS_NS records returned",
+                )
+                .into()));
+            }
+            match serde_json::from_str::<Vec<u128>>(rest.trim()) {
+                Ok(values) if !values.is_empty() => times = Some(values),
+                Ok(_) => return Some(Err(io::Error::other("empty timings returned").into())),
+                Err(error) => {
                     return Some(Err(io::Error::other(format!(
-                        "failed to parse BENCH_RESULTS_NS: {e}"
+                        "failed to parse BENCH_RESULTS_NS: {error}"
                     ))
                     .into()));
                 }
             }
-        } else if let Some(rest) = trimmed.strip_prefix("PEAK_MEMORY_BYTES:") {
-            if let Ok(bytes) = rest.trim().parse::<u64>() {
-                peak_mem = Some(bytes);
-            }
+        } else if let Some(rest) = trimmed.strip_prefix("PEAK_MEMORY_BYTES:")
+            && let Ok(bytes) = rest.trim().parse::<u64>()
+        {
+            peak_memory = Some(bytes);
         }
     }
 
-    if let Some(times) = times_res {
-        Some(Ok((times, peak_mem)))
-    } else {
-        None
+    let times = times?;
+    if times.len() != expected_iterations {
+        return Some(Err(io::Error::other(format!(
+            "expected {expected_iterations} timing samples, got {}",
+            times.len()
+        ))
+        .into()));
     }
+    Some(Ok((times, peak_memory)))
 }
 
 /// Check that a command exists (either an absolute/relative path or in PATH).
@@ -497,20 +540,18 @@ fn which_or_exists(cmd: &str) -> Result<(), String> {
 
 fn command_in_directory(directory: &Path, cmd: &str) -> bool {
     let candidate = directory.join(cmd);
-    if is_executable_file(&candidate) {
-        return true;
-    }
-
     #[cfg(windows)]
     if candidate.extension().is_none() {
         let extensions =
             std::env::var_os("PATHEXT").unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
-        return extensions.to_string_lossy().split(';').any(|extension| {
+        if extensions.to_string_lossy().split(';').any(|extension| {
             is_executable_file(&candidate.with_extension(extension.trim_start_matches('.')))
-        });
+        }) {
+            return true;
+        }
     }
 
-    false
+    is_executable_file(&candidate)
 }
 
 #[cfg(unix)]
@@ -555,7 +596,10 @@ fn make_error_result(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_executable_file, which_or_exists};
+    use super::{
+        batch_timeout, is_executable_file, parse_bench_output, receive_process_output,
+        which_or_exists,
+    };
 
     #[test]
     fn resolves_the_current_executable_without_external_which() {
@@ -594,5 +638,83 @@ mod tests {
         assert_eq!(st_even.median_ns, 250.0);
         assert_eq!(st_even.min_ns, 100);
         assert_eq!(st_even.max_ns, 400);
+    }
+
+    #[test]
+    fn parses_benchmark_samples_and_optional_memory() {
+        let output = "BENCH_RESULTS_NS: [10, 20]\nPEAK_MEMORY_BYTES: 4096\n";
+        let result = parse_bench_output(output, 2).expect("benchmark record");
+        let (times, memory) = result.expect("valid benchmark output");
+        assert_eq!(times, [10, 20]);
+        assert_eq!(memory, Some(4096));
+    }
+
+    #[test]
+    fn rejects_a_timing_count_that_does_not_match_the_request() {
+        let output = "BENCH_RESULTS_NS: [10]\n";
+        let result = parse_bench_output(output, 2).expect("benchmark record");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn falls_back_when_a_command_does_not_emit_benchmark_results() {
+        assert!(parse_bench_output("ordinary parser output\n", 1).is_none());
+    }
+
+    #[test]
+    fn batch_timeout_scales_with_the_number_of_parse_iterations() {
+        use crate::config::Settings;
+        use std::time::Duration;
+
+        let settings = Settings {
+            iterations: 10,
+            warmup_iterations: 2,
+            timeout_secs: 10,
+        };
+        assert_eq!(batch_timeout(&settings), Duration::from_secs(120));
+    }
+
+    #[test]
+    fn waiting_for_process_output_obeys_the_batch_deadline() {
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+
+        let (_sender, receiver) = mpsc::channel();
+        let result = receive_process_output(
+            Some(receiver),
+            Instant::now(),
+            Duration::from_millis(1),
+            "stdout",
+        );
+        assert!(matches!(result, Err(error) if error.kind() == std::io::ErrorKind::TimedOut));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn kills_a_parser_process_that_exceeds_its_timeout() {
+        use crate::config::{InputMode, ParserConfig};
+        use std::io;
+        use std::path::Path;
+        use std::time::{Duration, Instant};
+
+        let parser = ParserConfig {
+            name: "timeout-test".to_string(),
+            display_name: "Timeout test".to_string(),
+            language: "test".to_string(),
+            technique: "test".to_string(),
+            repository: String::new(),
+            run_cmd: vec!["sh".to_string(), "-c".to_string(), "sleep 10".to_string()],
+            input_mode: InputMode::FileArg,
+            enabled: true,
+        };
+
+        let start = Instant::now();
+        let error = super::run_once(&parser, Path::new("unused.p"), None, 1)
+            .expect_err("sleeping parser should time out");
+        assert!(matches!(
+            error.downcast_ref::<io::Error>(),
+            Some(error) if error.kind() == io::ErrorKind::TimedOut
+        ));
+        assert!(start.elapsed() < Duration::from_secs(5));
     }
 }

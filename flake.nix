@@ -19,7 +19,7 @@
             inherit system;
             overlays = [ rust-overlay.overlays.default ];
           };
-          rust = pkgs.rust-bin.stable."1.99.1".default.override {
+          rust = pkgs.rust-bin.stable."1.100.0".default.override {
             extensions = [ "rustfmt" "clippy" ];
           };
           sbtPackage = pkgs.sbt.override { jre = pkgs.jdk25; };

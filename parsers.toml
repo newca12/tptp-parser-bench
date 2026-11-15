@@ -26,13 +26,15 @@ enabled = true
 
 [[parsers]]
 name = "tptp-antlr"
-display_name = "tptp (ANTLR4, Rust)"
+display_name = "tptp (ANTLR4, Rust; experimental)"
 language = "Rust"
 technique = "ANTLR4 generated parser"
 repository = "https://github.com/newca12/playground-rs/tree/main/tptp"
 run_cmd = ["./target/release/tptp-antlr-wrapper"]
 input_mode = "file_arg"
-enabled = true
+# The upstream generated parser currently recovers from syntax errors on some
+# showcase inputs; keep it opt-in until those grammar/runtime errors are fixed.
+enabled = false
 
 [[parsers]]
 name = "mrs-tptp"

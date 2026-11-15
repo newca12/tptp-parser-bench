@@ -6,18 +6,51 @@
 //! generated parser. Exits 0 on success, 1 on parse error.
 //! Produces no output on success (designed for timing).
 
+use std::cell::RefCell;
 use std::env;
 use std::fs;
 use std::hint::black_box;
 use std::process;
+use std::rc::Rc;
 use std::time::Instant;
 
+use antlr4rust::error_listener::ErrorListener;
+use antlr4rust::errors::ANTLRError;
 use tptp_antlr::tptplexer::TPTPLexer;
 use tptp_antlr::tptpparser::TPTPParser;
 
 use antlr4rust::InputStream;
 use antlr4rust::common_token_stream::CommonTokenStream;
+use antlr4rust::parser::Parser;
+use antlr4rust::recognizer::Recognizer;
 use antlr4rust::token_factory::CommonTokenFactory;
+use antlr4rust::token_factory::TokenFactory;
+
+#[derive(Clone, Default)]
+struct SyntaxErrors(Rc<RefCell<Option<String>>>);
+
+impl SyntaxErrors {
+    fn first(&self) -> Option<String> {
+        self.0.borrow().clone()
+    }
+}
+
+impl<'input, T: Recognizer<'input>> ErrorListener<'input, T> for SyntaxErrors {
+    fn syntax_error(
+        &self,
+        _recognizer: &T,
+        _offending_symbol: Option<&<T::TF as TokenFactory<'input>>::Inner>,
+        line: isize,
+        column: isize,
+        message: &str,
+        _error: Option<&ANTLRError>,
+    ) {
+        let mut first = self.0.borrow_mut();
+        if first.is_none() {
+            *first = Some(format!("line {line}:{column} {message}"));
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -46,20 +79,33 @@ fn main() {
         }
     };
 
-    if !parse_antlr(&content) {
-        eprintln!("parse error in {}", path);
+    if let Err(error) = parse_antlr(&content) {
+        eprintln!("parse error in {}: {}", path, error);
         process::exit(1);
     }
 }
 
-fn parse_antlr(content: &str) -> bool {
+fn parse_antlr(content: &str) -> Result<(), String> {
     let tf = CommonTokenFactory;
-    let lexer = TPTPLexer::new_with_token_factory(InputStream::new(content), &tf);
+    let errors = SyntaxErrors::default();
+    let mut lexer = TPTPLexer::new_with_token_factory(InputStream::new(content), &tf);
+    lexer.remove_error_listeners();
+    lexer.add_error_listener(Box::new(errors.clone()));
     let token_source = CommonTokenStream::new(lexer);
     let mut parser = TPTPParser::new(token_source);
-    let success = parser.tptp_file().is_ok();
+    parser.remove_error_listeners();
+    parser.add_error_listener(Box::new(errors.clone()));
+    let parse_result = parser.tptp_file();
+    let syntax_error = errors.first();
+    let parse_success = parse_result.is_ok();
+    drop(parse_result);
     drop(parser);
-    success
+
+    match (parse_success, syntax_error) {
+        (true, None) => Ok(()),
+        (_, Some(error)) => Err(error),
+        (false, None) => Err("ANTLR parser rejected the input".to_string()),
+    }
 }
 
 fn bench_mode(warmup: usize, iters: usize, path: &str) {
@@ -72,8 +118,8 @@ fn bench_mode(warmup: usize, iters: usize, path: &str) {
     };
 
     for _ in 0..warmup {
-        if !parse_antlr(black_box(&content)) {
-            eprintln!("parse error in {}", path);
+        if let Err(error) = parse_antlr(black_box(&content)) {
+            eprintln!("parse error in {}: {}", path, error);
             process::exit(1);
         }
     }
@@ -81,10 +127,10 @@ fn bench_mode(warmup: usize, iters: usize, path: &str) {
     let mut times_ns = Vec::with_capacity(iters);
     for _ in 0..iters {
         let start = Instant::now();
-        let ok = parse_antlr(black_box(&content));
+        let result = parse_antlr(black_box(&content));
         let elapsed = start.elapsed().as_nanos();
-        if !ok {
-            eprintln!("parse error in {}", path);
+        if let Err(error) = result {
+            eprintln!("parse error in {}: {}", path, error);
             process::exit(1);
         }
         times_ns.push(elapsed);
@@ -106,22 +152,27 @@ fn bench_mode(warmup: usize, iters: usize, path: &str) {
 
 fn peak_memory_bytes() -> Option<u64> {
     let content = fs::read_to_string("/proc/self/status").ok()?;
-    let mut hwm = None;
-    let mut peak = None;
-    for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("VmHWM:") {
-            if let Some(val) = rest.split_whitespace().next() {
-                if let Ok(kb) = val.parse::<u64>() {
-                    hwm = Some(kb * 1024);
-                }
-            }
-        } else if let Some(rest) = line.strip_prefix("VmPeak:") {
-            if let Some(val) = rest.split_whitespace().next() {
-                if let Ok(kb) = val.parse::<u64>() {
-                    peak = Some(kb * 1024);
-                }
-            }
-        }
+    let line = content.lines().find(|line| line.starts_with("VmHWM:"))?;
+    let kilobytes = line
+        .strip_prefix("VmHWM:")?
+        .split_whitespace()
+        .next()?
+        .parse::<u64>()
+        .ok()?;
+    kilobytes.checked_mul(1024)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_antlr;
+
+    #[test]
+    fn rejects_syntax_errors_even_when_antlr_recovers_a_parse_tree() {
+        assert!(parse_antlr("fof(bad,axiom,p &).").is_err());
     }
-    hwm.or(peak)
+
+    #[test]
+    fn accepts_a_syntactically_valid_formula() {
+        assert!(parse_antlr("fof(good,axiom,p).").is_ok());
+    }
 }

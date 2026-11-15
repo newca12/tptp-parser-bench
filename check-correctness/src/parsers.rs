@@ -37,56 +37,101 @@ pub trait ParserBackend: Send + Sync {
 /// Parse the standardized check output from subprocess wrappers:
 /// "OK formulas=N includes=M" (or `includes=unknown` if unavailable).
 pub fn parse_check_output(stdout: &str, elapsed_ms: f64) -> ParseResult {
-    let line = stdout.trim();
-    if line.starts_with("OK") {
-        let mut formula_token = None;
-        let mut include_token = None;
-        for part in line.split_whitespace() {
-            if let Some(val) = part.strip_prefix("formulas=") {
-                formula_token = Some(val);
-            }
-            if let Some(val) = part.strip_prefix("includes=") {
-                include_token = Some(val);
-            }
-        }
-        match (
-            formula_token.and_then(parse_count_token),
-            include_token.and_then(parse_count_token),
-        ) {
-            (Some(formula_count), Some(include_count)) => ParseResult::Success {
-                formula_count,
-                include_count,
-                elapsed_ms,
-            },
-            _ => ParseResult::Failed {
-                elapsed_ms,
-                error: format!("Malformed check output: {}", line),
-            },
-        }
-    } else if line.starts_with("ROUNDTRIP_FAIL") {
-        let mut formula_count = 0;
-        let mut error = String::new();
-        for part in line.splitn(2, "error=") {
-            if part.starts_with("ROUNDTRIP_FAIL") {
-                for token in part.split_whitespace() {
-                    if let Some(val) = token.strip_prefix("formulas=") {
-                        formula_count = val.parse().unwrap_or(0);
+    let output = stdout.trim();
+    let header = output
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('\r');
+    let mut parts = header.split_whitespace();
+
+    match parts.next() {
+        Some("OK") => {
+            let mut formula_count = None;
+            let mut include_count = None;
+            let mut malformed = output
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .count()
+                != 1;
+
+            for part in parts {
+                if let Some(value) = part.strip_prefix("formulas=") {
+                    if formula_count.is_some() {
+                        malformed = true;
                     }
+                    formula_count = parse_count_token(value);
+                    malformed |= formula_count.is_none();
+                } else if let Some(value) = part.strip_prefix("includes=") {
+                    if include_count.is_some() {
+                        malformed = true;
+                    }
+                    include_count = parse_count_token(value);
+                    malformed |= include_count.is_none();
+                } else {
+                    malformed = true;
                 }
-            } else {
-                error = part.to_string();
+            }
+
+            match (malformed, formula_count, include_count) {
+                (false, Some(formula_count), Some(include_count)) => ParseResult::Success {
+                    formula_count,
+                    include_count,
+                    elapsed_ms,
+                },
+                _ => ParseResult::Failed {
+                    elapsed_ms,
+                    error: format!("Malformed check output: {}", output),
+                },
             }
         }
-        ParseResult::RoundtripFail {
-            formula_count: Some(formula_count),
-            elapsed_ms,
-            error,
+        Some("ROUNDTRIP_FAIL") => {
+            let fields = header
+                .strip_prefix("ROUNDTRIP_FAIL")
+                .unwrap_or_default()
+                .split("error=")
+                .next()
+                .unwrap_or_default();
+            let mut formula_count = None;
+            let mut malformed = false;
+
+            for part in fields.split_whitespace() {
+                if let Some(value) = part.strip_prefix("formulas=") {
+                    if formula_count.is_some() {
+                        malformed = true;
+                    }
+                    formula_count = value.parse().ok();
+                    malformed |= formula_count.is_none();
+                } else if let Some(value) = part.strip_prefix("includes=") {
+                    malformed |= parse_count_token(value).is_none();
+                } else {
+                    malformed = true;
+                }
+            }
+
+            let error = output
+                .split_once("error=")
+                .map(|(_, error)| error.trim())
+                .filter(|error| !error.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    if malformed {
+                        format!("Malformed ROUNDTRIP_FAIL output: {}", header)
+                    } else {
+                        "Roundtrip verification failed".to_string()
+                    }
+                });
+
+            ParseResult::RoundtripFail {
+                formula_count,
+                elapsed_ms,
+                error,
+            }
         }
-    } else {
-        ParseResult::Failed {
+        _ => ParseResult::Failed {
             elapsed_ms,
-            error: format!("Unexpected output: {}", line),
-        }
+            error: format!("Unexpected output: {}", output),
+        },
     }
 }
 
@@ -136,6 +181,42 @@ mod tests {
                 include_count: None,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn does_not_accept_status_tokens_that_only_start_with_ok() {
+        assert!(matches!(
+            parse_check_output("OKAY formulas=12 includes=3", 1.0),
+            ParseResult::Failed { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_extra_fields_and_diagnostics_in_success_output() {
+        assert!(matches!(
+            parse_check_output("OK formulas=12 includes=3 extra=value", 1.0),
+            ParseResult::Failed { .. }
+        ));
+        assert!(matches!(
+            parse_check_output("OK formulas=12 includes=3\nunexpected diagnostic", 1.0),
+            ParseResult::Failed { .. }
+        ));
+    }
+
+    #[test]
+    fn preserves_multiline_roundtrip_errors() {
+        let result = parse_check_output(
+            "ROUNDTRIP_FAIL formulas=12 includes=3 error=first line\nsecond line",
+            1.0,
+        );
+        assert!(matches!(
+            result,
+            ParseResult::RoundtripFail {
+                formula_count: Some(12),
+                error,
+                ..
+            } if error == "first line\nsecond line"
         ));
     }
 }

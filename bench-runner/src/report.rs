@@ -553,7 +553,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       memoryChart.data.labels = filtered.map(r => r.display_name);
       memoryChart.data.datasets = [{{
         label: 'Peak memory',
-        data: filtered.map(r => r.peak_memory_bytes || 0),
+        data: filtered.map(r => r.peak_memory_bytes ?? null),
         backgroundColor: filtered.map((r, i) => colorFor(i)),
         borderRadius: 4,
       }}];
@@ -579,7 +579,7 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
           const rank = r.success ? idx + 1 : 0;
           const medal = rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : rank || '—';
           const minMax = r.success ? (formatNs(r.min_ns) + ' / ' + formatNs(r.max_ns)) : '—';
-          const peakMem = r.success && r.peak_memory_bytes ? formatBytes(r.peak_memory_bytes) : '—';
+          const peakMem = r.success && r.peak_memory_bytes != null ? formatBytes(r.peak_memory_bytes) : '—';
           html += `
             <tr class="${{isBest ? 'best-row' : ''}}">
               <td>${{medal}}</td>

@@ -109,22 +109,12 @@ object Main {
       val statusPath = java.nio.file.Paths.get("/proc/self/status")
       if (java.nio.file.Files.exists(statusPath)) {
         val content = java.nio.file.Files.readString(statusPath)
-        var hwm: Option[Long] = None
-        var peak: Option[Long] = None
-        for (line <- content.linesIterator) {
-          if (line.startsWith("VmHWM:")) {
+        content.linesIterator
+          .find(_.startsWith("VmHWM:"))
+          .flatMap { line =>
             val parts = line.split("\\s+")
-            if (parts.length >= 2) {
-              hwm = parts(1).toLongOption.map(_ * 1024L)
-            }
-          } else if (line.startsWith("VmPeak:")) {
-            val parts = line.split("\\s+")
-            if (parts.length >= 2) {
-              peak = parts(1).toLongOption.map(_ * 1024L)
-            }
+            if (parts.length >= 2) parts(1).toLongOption.map(_ * 1024L) else None
           }
-        }
-        hwm.orElse(peak)
       } else None
     } catch {
       case _: Exception => None
