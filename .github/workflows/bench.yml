@@ -41,6 +41,9 @@ jobs:
           distribution: 'temurin'
           java-version: '25'
 
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
       - name: Build Java ANTLR parser wrapper
         working-directory: parsers/java-antlr-wrapper
         run: mvn -q package
