@@ -115,7 +115,7 @@ tptp-parser-bench/
 │       └── parsers/        # Per-parser backend implementations
 ├── parsers/
 │   ├── tptp-nom-wrapper/   # CLI wrapper for MichaelRawson/tptp
-│   ├── mrs-tptp-wrapper/   # CLI wrapper for mrs-tptp (winnow)
+│   ├── mrs-tptp-wrapper/   # CLI wrapper for mrs-tptp (winnow, zero-copy)
 │   ├── tptp-antlr-wrapper/ # CLI wrapper for ANTLR4 parser
 │   ├── vampire-tptp-wrapper/ # CLI wrapper for Vampire's TPTP parser (C++)
 │   ├── java-antlr-wrapper/  # CLI wrapper for ANTLR4 parser (Java)
