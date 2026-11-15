@@ -20,6 +20,13 @@ import scala.util.{Failure, Success, Try}
   */
 object Main {
   def main(args: Array[String]): Unit = {
+    if (args.length == 4 && args(0) == "--bench") {
+      val warmup = args(1).toInt
+      val iters = args(2).toInt
+      benchFile(warmup, iters, args(3))
+      return
+    }
+
     if (args.length == 2 && args(0) == "--check") {
       checkFile(args(1))
       return
@@ -52,6 +59,48 @@ object Main {
     } finally {
       source.close()
     }
+  }
+
+  def benchFile(warmup: Int, iters: Int, path: String): Unit = {
+    val content = try {
+      java.nio.file.Files.readString(java.nio.file.Paths.get(path), java.nio.charset.StandardCharsets.UTF_8)
+    } catch {
+      case e: Exception =>
+        System.err.println(s"error reading $path: ${e.getMessage}")
+        System.exit(2)
+        return
+    }
+
+    for (_ <- 0 until warmup) {
+      val source = Source.fromString(content)
+      try {
+        TPTPParser.problem(source)
+      } catch {
+        case e: Exception =>
+          System.err.println(s"error parsing $path: ${e.getMessage}")
+          System.exit(1)
+      } finally {
+        source.close()
+      }
+    }
+
+    val times = new Array[Long](iters)
+    for (i <- 0 until iters) {
+      val source = Source.fromString(content)
+      val t0 = System.nanoTime()
+      try {
+        TPTPParser.problem(source)
+      } catch {
+        case e: Exception =>
+          System.err.println(s"error parsing $path: ${e.getMessage}")
+          System.exit(1)
+      } finally {
+        source.close()
+      }
+      times(i) = System.nanoTime() - t0
+    }
+
+    println(s"BENCH_RESULTS_NS: [${times.mkString(",")}]")
   }
 
   def checkFile(path: String): Unit = {

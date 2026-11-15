@@ -33,19 +33,44 @@ pub fn generate_github_action_json(results: &[BenchResult]) -> String {
     let entries: Vec<Entry> = results
         .iter()
         .filter(|r| r.success)
-        .map(|r| Entry {
-            name: format!("{} / {}", r.display_name, r.file_name),
-            unit: "ns".to_string(),
-            value: r.mean_ns,
-            range: format!("± {:.0}", r.stddev_ns),
-            extra: format!(
-                "{} bytes, {:.2} MB/s, {} ({})",
-                r.file_size_bytes, r.throughput_mb_s, r.language, r.technique
-            ),
+        .map(|r| {
+            let primary_val = if r.median_ns > 0.0 {
+                r.median_ns
+            } else {
+                r.mean_ns
+            };
+            Entry {
+                name: format!("{} / {}", r.display_name, r.file_name),
+                unit: "ns".to_string(),
+                value: primary_val,
+                range: format!("± {:.0}", r.stddev_ns),
+                extra: format!(
+                    "{} bytes, {:.2} MB/s, median: {}, mean: {} ± {}, {} ({})",
+                    r.file_size_bytes,
+                    r.throughput_mb_s,
+                    format_time_ns(r.median_ns),
+                    format_time_ns(r.mean_ns),
+                    format_time_ns(r.stddev_ns),
+                    r.language,
+                    r.technique
+                ),
+            }
         })
         .collect();
 
     serde_json::to_string_pretty(&entries).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn format_time_ns(ns: f64) -> String {
+    if ns >= 1e9 {
+        format!("{:.2} s", ns / 1e9)
+    } else if ns >= 1e6 {
+        format!("{:.2} ms", ns / 1e6)
+    } else if ns >= 1e3 {
+        format!("{:.2} µs", ns / 1e3)
+    } else {
+        format!("{:.0} ns", ns)
+    }
 }
 
 // ── HTML builder ────────────────────────────────────────────────────────────
@@ -271,8 +296,10 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
         <tr>
           <th>Rank</th>
           <th>Parser</th>
+          <th>Median</th>
           <th>Mean</th>
           <th>Std Dev</th>
+          <th>Min / Max</th>
           <th>Throughput</th>
           <th>Status</th>
         </tr>
@@ -328,11 +355,15 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
       return (mb_s * 1000).toFixed(2) + ' KB/s';
     }}
 
-    // Find the best (lowest mean_ns) parser for a given file
+    function primaryTime(r) {{
+      return r && r.median_ns > 0 ? r.median_ns : (r ? r.mean_ns : 0);
+    }}
+
+    // Find the best (lowest median parse time) parser for a given file
     function bestForFile(file) {{
       const forFile = RAW.filter(r => r.file_name === file && r.success);
       if (forFile.length === 0) return null;
-      return forFile.reduce((a, b) => a.mean_ns < b.mean_ns ? a : b);
+      return forFile.reduce((a, b) => primaryTime(a) < primaryTime(b) ? a : b);
     }}
 
     // ── Charts ───────────────────────────────────────────────────────────
@@ -351,7 +382,17 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
             legend: {{ display: false }},
             tooltip: {{
               callbacks: {{
-                label: (c) => c.dataset.label + ': ' + formatNs(c.raw)
+                label: (c) => {{
+                  const file = document.getElementById('fileSelect').value;
+                  const filtered = RAW.filter(r => r.file_name === file && r.success);
+                  const r = filtered[c.dataIndex];
+                  if (!r) return c.dataset.label + ': ' + formatNs(c.raw);
+                  return [
+                    'Median: ' + formatNs(primaryTime(r)),
+                    'Mean: ' + formatNs(r.mean_ns) + ' ' + PM + ' ' + formatNs(r.stddev_ns),
+                    'Min / Max: ' + formatNs(r.min_ns) + ' / ' + formatNs(r.max_ns),
+                  ];
+                }}
               }}
             }}
           }},
@@ -429,8 +470,8 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
         best && r.display_name === best.display_name ? TROPHY + ' ' + r.display_name : r.display_name
       );
       timeChart.data.datasets = [{{
-        label: 'Mean parse time',
-        data: filtered.map(r => r.mean_ns),
+        label: 'Median parse time',
+        data: filtered.map(r => primaryTime(r)),
         backgroundColor: bgColors,
         borderColor: borderColors,
         borderWidth: filtered.map(r => best && r.display_name === best.display_name ? 2 : 0),
@@ -449,23 +490,26 @@ fn build_html(results_json: &str, results: &[BenchResult]) -> String {
 
       for (const file of files) {{
         const forFile = RAW.filter(r => r.file_name === file);
-        const successful = forFile.filter(r => r.success).sort((a, b) => a.mean_ns - b.mean_ns);
+        const successful = forFile.filter(r => r.success).sort((a, b) => primaryTime(a) - primaryTime(b));
         const failed = forFile.filter(r => !r.success);
         const ranked = [...successful, ...failed];
         const bestName = successful.length > 0 ? successful[0].display_name : null;
 
-        html += `<tr class="file-header"><td colspan="6">${{escapeHtml(file)}}</td></tr>`;
+        html += `<tr class="file-header"><td colspan="8">${{escapeHtml(file)}}</td></tr>`;
 
         ranked.forEach((r, idx) => {{
           const isBest = r.success && r.display_name === bestName;
           const rank = r.success ? idx + 1 : 0;
           const medal = rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : rank || '—';
+          const minMax = r.success ? (formatNs(r.min_ns) + ' / ' + formatNs(r.max_ns)) : '—';
           html += `
             <tr class="${{isBest ? 'best-row' : ''}}">
               <td>${{medal}}</td>
               <td>${{escapeHtml(r.display_name)}}</td>
+              <td>${{r.success ? formatNs(primaryTime(r)) : '—'}}</td>
               <td>${{r.success ? formatNs(r.mean_ns) : '—'}}</td>
               <td>${{r.success ? PM + ' ' + formatNs(r.stddev_ns) : '—'}}</td>
+              <td>${{minMax}}</td>
               <td>${{r.success ? formatThroughput(r.throughput_mb_s) : '—'}}</td>
               <td class="${{r.success ? 'success' : 'failure'}}">${{r.success ? CHECK : CROSS + ' ' + escapeHtml(r.error || '')}}</td>
             </tr>`;

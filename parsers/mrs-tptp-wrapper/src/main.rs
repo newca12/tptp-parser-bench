@@ -8,10 +8,22 @@
 use mrs_tptp::parse_tptp;
 use std::env;
 use std::fs;
+use std::hint::black_box;
 use std::process;
+use std::time::Instant;
 
 fn main() {
-    let path = match env::args().nth(1) {
+    let args: Vec<String> = env::args().collect();
+
+    // --bench mode: in-process timed iterations
+    if args.len() == 5 && args[1] == "--bench" {
+        let warmup: usize = args[2].parse().unwrap_or(0);
+        let iters: usize = args[3].parse().unwrap_or(50);
+        bench_mode(warmup, iters, &args[4]);
+        return;
+    }
+
+    let path = match args.get(1) {
         Some(p) => p,
         None => {
             eprintln!("usage: mrs-tptp-wrapper <file.p>");
@@ -19,7 +31,7 @@ fn main() {
         }
     };
 
-    let content = match fs::read_to_string(&path) {
+    let content = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error reading {}: {}", path, e);
@@ -34,4 +46,52 @@ fn main() {
             process::exit(1);
         }
     }
+}
+
+fn bench_mode(warmup: usize, iters: usize, path: &str) {
+    let content = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error reading {}: {}", path, e);
+            process::exit(2);
+        }
+    };
+
+    for _ in 0..warmup {
+        match parse_tptp(black_box(&content)) {
+            Ok(parsed) => {
+                black_box(parsed);
+            }
+            Err(e) => {
+                eprintln!("parse error in {}: {}", path, e);
+                process::exit(1);
+            }
+        }
+    }
+
+    let mut times_ns = Vec::with_capacity(iters);
+    for _ in 0..iters {
+        let start = Instant::now();
+        let res = parse_tptp(black_box(&content));
+        let elapsed = start.elapsed().as_nanos();
+        match res {
+            Ok(parsed) => {
+                black_box(parsed);
+            }
+            Err(e) => {
+                eprintln!("parse error in {}: {}", path, e);
+                process::exit(1);
+            }
+        }
+        times_ns.push(elapsed);
+    }
+
+    println!(
+        "BENCH_RESULTS_NS: [{}]",
+        times_ns
+            .iter()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    );
 }

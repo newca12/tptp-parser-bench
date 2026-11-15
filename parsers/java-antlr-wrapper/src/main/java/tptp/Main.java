@@ -19,6 +19,13 @@ import org.antlr.v4.runtime.*;
  */
 public class Main {
     public static void main(String[] args) {
+        if (args.length == 4 && args[0].equals("--bench")) {
+            int warmup = Integer.parseInt(args[1]);
+            int iters = Integer.parseInt(args[2]);
+            benchFile(warmup, iters, args[3]);
+            return;
+        }
+
         if (args.length == 2 && args[0].equals("--check")) {
             checkFile(args[1]);
             return;
@@ -65,6 +72,72 @@ public class Main {
             System.err.println("error reading " + path + ": " + e.getMessage());
             System.exit(2);
         }
+    }
+
+    static void benchFile(int warmup, int iters, String path) {
+        try {
+            String content = java.nio.file.Files.readString(
+                java.nio.file.Paths.get(path),
+                java.nio.charset.StandardCharsets.UTF_8
+            );
+
+            for (int i = 0; i < warmup; i++) {
+                if (!parseContent(content)) {
+                    System.err.println("parse error in " + path);
+                    System.exit(1);
+                }
+            }
+
+            long[] times = new long[iters];
+            for (int i = 0; i < iters; i++) {
+                long t0 = System.nanoTime();
+                boolean ok = parseContent(content);
+                long elapsed = System.nanoTime() - t0;
+                if (!ok) {
+                    System.err.println("parse error in " + path);
+                    System.exit(1);
+                }
+                times[i] = elapsed;
+            }
+
+            StringBuilder sb = new StringBuilder("BENCH_RESULTS_NS: [");
+            for (int i = 0; i < iters; i++) {
+                if (i > 0) sb.append(",");
+                sb.append(times[i]);
+            }
+            sb.append("]");
+            System.out.println(sb.toString());
+        } catch (Exception e) {
+            System.err.println("error reading " + path + ": " + e.getMessage());
+            System.exit(2);
+        }
+    }
+
+    static boolean parseContent(String content) {
+        CharStream input = CharStreams.fromString(content);
+        TPTPLexer lexer = new TPTPLexer(input);
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        TPTPParser parser = new TPTPParser(tokens);
+
+        parser.removeErrorListeners();
+        lexer.removeErrorListeners();
+
+        final boolean[] hasError = {false};
+        BaseErrorListener errorListener = new BaseErrorListener() {
+            @Override
+            public void syntaxError(Recognizer<?, ?> recognizer,
+                                    Object offendingSymbol,
+                                    int line, int charPositionInLine,
+                                    String msg,
+                                    RecognitionException e) {
+                hasError[0] = true;
+            }
+        };
+        parser.addErrorListener(errorListener);
+        lexer.addErrorListener(errorListener);
+
+        parser.tptp_file();
+        return !hasError[0];
     }
 
     static void checkFile(String path) {

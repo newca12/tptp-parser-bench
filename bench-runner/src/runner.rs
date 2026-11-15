@@ -19,7 +19,10 @@ pub struct BenchResult {
     pub file_size_bytes: u64,
     pub times_ns: Vec<u128>,
     pub mean_ns: f64,
+    pub median_ns: f64,
     pub stddev_ns: f64,
+    pub min_ns: u128,
+    pub max_ns: u128,
     pub throughput_mb_s: f64,
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,42 +56,57 @@ pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Setting
         return make_error_result(parser, &file_name, file_size, &e);
     }
 
-    let mut times_ns = Vec::with_capacity(settings.iterations);
-    let total_iters = settings.warmup_iterations + settings.iterations;
+    // Try high-accuracy in-process benchmark mode if supported by the wrapper.
+    let times_ns = match try_run_in_process_bench(parser, file_path, settings) {
+        Some(Ok(times)) => times,
+        Some(Err(e)) => {
+            return make_error_result(parser, &file_name, file_size, &e.to_string());
+        }
+        None => {
+            // Fallback: run external process loop
+            let mut times = Vec::with_capacity(settings.iterations);
+            let total_iters = settings.warmup_iterations + settings.iterations;
 
-    for i in 0..total_iters {
-        let is_warmup = i < settings.warmup_iterations;
-        match run_once(
-            parser,
-            file_path,
-            file_content.as_deref(),
-            settings.timeout_secs,
-        ) {
-            Ok(duration) => {
-                if !is_warmup {
-                    times_ns.push(duration.as_nanos());
+            for i in 0..total_iters {
+                let is_warmup = i < settings.warmup_iterations;
+                match run_once(
+                    parser,
+                    file_path,
+                    file_content.as_deref(),
+                    settings.timeout_secs,
+                ) {
+                    Ok(duration) => {
+                        if !is_warmup {
+                            times.push(duration.as_nanos());
+                        }
+                    }
+                    Err(e) => {
+                        return make_error_result(
+                            parser,
+                            &file_name,
+                            file_size,
+                            &format!(
+                                "failed on iteration {} ({}): {}",
+                                i + 1,
+                                if is_warmup { "warmup" } else { "timed" },
+                                e
+                            ),
+                        );
+                    }
                 }
             }
-            Err(e) => {
-                return make_error_result(
-                    parser,
-                    &file_name,
-                    file_size,
-                    &format!(
-                        "failed on iteration {} ({}): {}",
-                        i + 1,
-                        if is_warmup { "warmup" } else { "timed" },
-                        e
-                    ),
-                );
-            }
+            times
         }
-    }
+    };
 
-    let (mean_ns, stddev_ns) = stats(&times_ns);
-    let mean_secs = mean_ns / 1e9;
-    let throughput_mb_s = if mean_secs > 0.0 {
-        (file_size as f64 / 1e6) / mean_secs
+    let st = stats(&times_ns);
+    let representative_secs = if st.median_ns > 0.0 {
+        st.median_ns / 1e9
+    } else {
+        st.mean_ns / 1e9
+    };
+    let throughput_mb_s = if representative_secs > 0.0 {
+        (file_size as f64 / 1e6) / representative_secs
     } else {
         0.0
     };
@@ -101,8 +119,11 @@ pub fn run_benchmark(parser: &ParserConfig, file_path: &Path, settings: &Setting
         file_name,
         file_size_bytes: file_size,
         times_ns,
-        mean_ns,
-        stddev_ns,
+        mean_ns: st.mean_ns,
+        median_ns: st.median_ns,
+        stddev_ns: st.stddev_ns,
+        min_ns: st.min_ns,
+        max_ns: st.max_ns,
         throughput_mb_s,
         success: true,
         error: None,
@@ -261,10 +282,26 @@ fn run_once(
     Ok(elapsed)
 }
 
-/// Mean and standard deviation of nanosecond timings.
-fn stats(times_ns: &[u128]) -> (f64, f64) {
+/// Statistical summary of nanosecond timings.
+#[derive(Debug, Clone, Copy)]
+struct Stats {
+    mean_ns: f64,
+    median_ns: f64,
+    stddev_ns: f64,
+    min_ns: u128,
+    max_ns: u128,
+}
+
+/// Compute statistical metrics of nanosecond timings.
+fn stats(times_ns: &[u128]) -> Stats {
     if times_ns.is_empty() {
-        return (0.0, 0.0);
+        return Stats {
+            mean_ns: 0.0,
+            median_ns: 0.0,
+            stddev_ns: 0.0,
+            min_ns: 0,
+            max_ns: 0,
+        };
     }
     let n = times_ns.len() as f64;
     let mean = times_ns.iter().sum::<u128>() as f64 / n;
@@ -273,7 +310,153 @@ fn stats(times_ns: &[u128]) -> (f64, f64) {
         .map(|&t| (t as f64 - mean).powi(2))
         .sum::<f64>()
         / n;
-    (mean, variance.sqrt())
+
+    let mut sorted = times_ns.to_vec();
+    sorted.sort_unstable();
+    let min = sorted[0];
+    let max = sorted[sorted.len() - 1];
+    let median = if sorted.len() % 2 == 1 {
+        sorted[sorted.len() / 2] as f64
+    } else {
+        (sorted[sorted.len() / 2 - 1] as f64 + sorted[sorted.len() / 2] as f64) / 2.0
+    };
+
+    Stats {
+        mean_ns: mean,
+        median_ns: median,
+        stddev_ns: variance.sqrt(),
+        min_ns: min,
+        max_ns: max,
+    }
+}
+
+/// Attempt to run in-process benchmarking via `--bench <warmup> <iters> <file>`.
+///
+/// Returns:
+/// - `Some(Ok(times))` if the wrapper supports `--bench` and successfully returned timings.
+/// - `Some(Err(e))` if the wrapper attempted `--bench` but failed with a parse or runtime error.
+/// - `None` if the wrapper does not support `--bench` or input mode is stdin (signals fallback).
+fn try_run_in_process_bench(
+    parser: &ParserConfig,
+    file_path: &Path,
+    settings: &Settings,
+) -> Option<crate::Result<Vec<u128>>> {
+    if let InputMode::Stdin = parser.input_mode {
+        return None;
+    }
+
+    let program = &parser.run_cmd[0];
+    let args = &parser.run_cmd[1..];
+
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    cmd.arg("--bench");
+    cmd.arg(settings.warmup_iterations.to_string());
+    cmd.arg(settings.iterations.to_string());
+    cmd.arg(file_path);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(_) => return None,
+    };
+
+    let stderr_reader = child.stderr.take().map(|mut stderr| {
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut stderr, &mut bytes);
+            let _ = sender.send(bytes);
+        });
+        receiver
+    });
+
+    let stdout_reader = child.stdout.take().map(|mut stdout| {
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut stdout, &mut bytes);
+            let _ = sender.send(bytes);
+        });
+        receiver
+    });
+
+    let batch_timeout = Duration::from_secs(settings.timeout_secs.max(60));
+    let status = match child.wait_timeout(batch_timeout) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(-(child.id() as i32), libc::SIGKILL);
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            return Some(Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "batch benchmark timed out after {}s",
+                    batch_timeout.as_secs()
+                ),
+            )
+            .into()));
+        }
+        Err(e) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Some(Err(e.into()));
+        }
+    };
+
+    let stdout_bytes = stdout_reader
+        .and_then(|r| r.recv().ok())
+        .unwrap_or_default();
+    let stderr_bytes = stderr_reader
+        .and_then(|r| r.recv().ok())
+        .unwrap_or_default();
+
+    let stdout_str = String::from_utf8_lossy(&stdout_bytes);
+    let stderr_str = String::from_utf8_lossy(&stderr_bytes);
+
+    if !status.success() {
+        if stdout_str.contains("BENCH_RESULTS_NS:") {
+            return Some(Err(io::Error::other(format!(
+                "in-process benchmark failed with {}: {}",
+                status,
+                stderr_str.trim()
+            ))
+            .into()));
+        }
+        return None;
+    }
+
+    for line in stdout_str.lines() {
+        if let Some(rest) = line.trim().strip_prefix("BENCH_RESULTS_NS:") {
+            let json_str = rest.trim();
+            match serde_json::from_str::<Vec<u128>>(json_str) {
+                Ok(times) if !times.is_empty() => {
+                    return Some(Ok(times));
+                }
+                Ok(_) => {
+                    return Some(Err(io::Error::other("empty timings returned").into()));
+                }
+                Err(e) => {
+                    return Some(Err(io::Error::other(format!(
+                        "failed to parse BENCH_RESULTS_NS: {e}"
+                    ))
+                    .into()));
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Check that a command exists (either an absolute/relative path or in PATH).
@@ -343,7 +526,10 @@ fn make_error_result(
         file_size_bytes: file_size,
         times_ns: vec![],
         mean_ns: 0.0,
+        median_ns: 0.0,
         stddev_ns: 0.0,
+        min_ns: 0,
+        max_ns: 0,
         throughput_mb_s: 0.0,
         success: false,
         error: Some(error.to_string()),
@@ -374,5 +560,22 @@ mod tests {
     #[test]
     fn reports_missing_commands() {
         assert!(which_or_exists("tptp-parser-bench-command-that-does-not-exist").is_err());
+    }
+
+    #[test]
+    fn computes_accurate_stats_including_median_and_min_max() {
+        use super::stats;
+        let times = vec![100, 200, 300, 400, 500];
+        let st = stats(&times);
+        assert_eq!(st.min_ns, 100);
+        assert_eq!(st.max_ns, 500);
+        assert_eq!(st.median_ns, 300.0);
+        assert_eq!(st.mean_ns, 300.0);
+
+        let times_even = vec![100, 200, 300, 400];
+        let st_even = stats(&times_even);
+        assert_eq!(st_even.median_ns, 250.0);
+        assert_eq!(st_even.min_ns, 100);
+        assert_eq!(st_even.max_ns, 400);
     }
 }

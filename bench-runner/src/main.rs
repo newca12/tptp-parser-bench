@@ -88,10 +88,11 @@ fn main() -> Result<()> {
 
             if result.success {
                 println!(
-                    "  ✓ {} : {:.2} ms ± {:.2} ms ({})",
+                    "  ✓ {} : {} (median), {} ± {} ({})",
                     result.file_name,
-                    result.mean_ns / 1e6,
-                    result.stddev_ns / 1e6,
+                    format_time_ns(result.median_ns),
+                    format_time_ns(result.mean_ns),
+                    format_time_ns(result.stddev_ns),
                     format_throughput(result.throughput_mb_s),
                 );
             } else {
@@ -147,5 +148,18 @@ fn format_throughput(mb_s: f64) -> String {
         format!("{:.2} MB/s", mb_s)
     } else {
         format!("{:.2} KB/s", mb_s * 1000.0)
+    }
+}
+
+/// Format nanosecond timings with adaptive units (ns, µs, ms, s).
+fn format_time_ns(ns: f64) -> String {
+    if ns >= 1e9 {
+        format!("{:.2} s", ns / 1e9)
+    } else if ns >= 1e6 {
+        format!("{:.2} ms", ns / 1e6)
+    } else if ns >= 1e3 {
+        format!("{:.2} µs", ns / 1e3)
+    } else {
+        format!("{:.0} ns", ns)
     }
 }

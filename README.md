@@ -170,8 +170,11 @@ Results: `target/criterion/` (HTML reports per benchmark group).
 
 ### `bench-runner` (Cross-language)
 
-Process-based benchmarking that works with any parser exposed as a CLI.
-Measures wall-clock time including process startup overhead.
+Benchmarking orchestrator that works with any parser exposed as a CLI.
+Supports high-precision in-process benchmarking via `--bench <warmup> <iters> <file>`
+(eliminating process spawn overhead and JIT cold starts) with automatic fallback
+to wall-clock subprocess timing for raw CLIs. Measures median, mean, standard
+deviation, min, max, and throughput.
 
 Results: `results/report.html` (interactive Chart.js dashboard).
 The runner exits non-zero if any enabled parser/file combination fails.
