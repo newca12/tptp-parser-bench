@@ -8,7 +8,7 @@ pub struct MrsTptpBackend;
 
 impl ParserBackend for MrsTptpBackend {
     fn name(&self) -> &str {
-        "mrs-tptp (winnow)"
+        "mrs-tptp (winnow, zero-copy)"
     }
 
     fn verification_mode(&self) -> VerificationMode {

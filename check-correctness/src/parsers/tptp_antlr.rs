@@ -13,7 +13,7 @@ pub struct TptpAntlrBackend;
 
 impl ParserBackend for TptpAntlrBackend {
     fn name(&self) -> &str {
-        "tptp (ANTLR4)"
+        "tptp (ANTLR4, Rust)"
     }
 
     fn verification_mode(&self) -> VerificationMode {

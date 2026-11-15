@@ -12,8 +12,8 @@ Results are published to GitHub Pages as interactive Chart.js dashboards.
 | Parser | Language | Technique | Repository |
 |--------|----------|-----------|------------|
 | **tptp** (nom) | Rust | nom (zero-copy, streaming) | [MichaelRawson/tptp](https://github.com/MichaelRawson/tptp) |
-| **mrs-tptp** (winnow) | Rust | winnow parser combinators | [newca12/mrs](https://github.com/newca12/mrs) |
-| **tptp** (ANTLR4) | Rust | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
+| **mrs-tptp** (winnow, zero-copy) | Rust | winnow parser combinators | [newca12/mrs](https://github.com/newca12/mrs) |
+| **tptp** (ANTLR4, Rust) | Rust | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
 | **Vampire TPTP** (hand-written) | C++ | hand-written recursive descent | [vprover/vampire](https://github.com/vprover/vampire) |
 | **tptp** (ANTLR4, Java) | Java | ANTLR4 generated parser | [newca12/playground-rs](https://github.com/newca12/playground-rs/tree/main/tptp) |
 | **scala-tptp-parser** (combinators) | Scala | Scala parser combinators | [leoprover/scala-tptp-parser](https://github.com/leoprover/scala-tptp-parser) |

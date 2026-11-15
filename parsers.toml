@@ -26,7 +26,7 @@ enabled = true
 
 [[parsers]]
 name = "tptp-antlr"
-display_name = "tptp (ANTLR4)"
+display_name = "tptp (ANTLR4, Rust)"
 language = "Rust"
 technique = "ANTLR4 generated parser"
 repository = "https://github.com/newca12/playground-rs/tree/main/tptp"
@@ -36,7 +36,7 @@ enabled = true
 
 [[parsers]]
 name = "mrs-tptp"
-display_name = "mrs-tptp (winnow)"
+display_name = "mrs-tptp (winnow, zero-copy)"
 language = "Rust"
 technique = "winnow parser combinators"
 repository = "https://github.com/newca12/mrs"
